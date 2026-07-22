@@ -1,0 +1,12 @@
+# Do not include azure-functions-worker in this file
+# The Python Worker is managed by the Azure Functions platform
+
+# MCP tool decorators (@app.mcp_tool / MCPToolContext) live in the 2.x line,
+# which requires Python 3.13 (Requires-Python metadata hides 2.x from pip on 3.11).
+# 2.2.0 is stable — verified locally to expose mcp_tool/mcp_tool_property/MCPToolContext.
+azure-functions>=2.2.0
+
+azure-identity>=1.17.0
+azure-keyvault-secrets>=4.8.0
+aiohttp>=3.9.0
+mcp

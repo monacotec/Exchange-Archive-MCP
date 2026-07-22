@@ -1,0 +1,29 @@
+{
+  "servers": {
+    "exchange-mcp-local": {
+      "type": "stdio",
+      "command": "func",
+      "args": ["start"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "ENTRA_CLIENT_ID": "${input:clientId}",
+        "ENTRA_CLIENT_SECRET": "${input:clientSecret}",
+        "ENTRA_TENANT_ID": "${input:tenantId}"
+      }
+    },
+    "exchange-mcp-remote": {
+      "type": "http",
+      "url": "https://${input:funcAppName}.azurewebsites.net/runtime/webhooks/mcp",
+      "headers": {
+        "x-functions-key": "${input:mcpExtensionKey}"
+      }
+    }
+  },
+  "inputs": [
+    { "id": "clientId",      "type": "promptString", "description": "Entra app client ID" },
+    { "id": "clientSecret",  "type": "promptString", "description": "Entra app client secret", "password": true },
+    { "id": "tenantId",      "type": "promptString", "description": "Entra tenant ID" },
+    { "id": "funcAppName",   "type": "promptString", "description": "Function App name (from azd up output)" },
+    { "id": "mcpExtensionKey", "type": "promptString", "description": "MCP extension system key", "password": true }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "ENTRA_CLIENT_ID": "<FILL: MCP app client ID from Key Vault secret mcp-entra-client-id>",
+    "ENTRA_CLIENT_SECRET": "<FILL: MCP app client secret from Key Vault secret mcp-exchange-client-secret>",
+    "ENTRA_TENANT_ID": "<FILL: your Entra tenant ID>",
+    "MCP_ALLOWED_MAILBOXES": ""
+  }
+}

@@ -1,0 +1,50 @@
+# ── Secrets & environment (NEVER commit) ─────────────────────────────────────
+.env
+*.env
+!*.env.example
+.env.*
+!.env.example
+*.key
+*.key.bin
+*.pfx
+*.pem
+local.settings.json
+appsettings.json
+!appsettings.example.json
+
+# azd environment (machine/deploy-specific; holds .env)
+.azure/
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+.venv/
+.venv-check/
+venv/
+*.egg-info/
+
+# ── .NET / desktop-handler build output ──────────────────────────────────────
+bin/
+obj/
+dist/
+*.user
+
+# ── PowerShell / Pester ──────────────────────────────────────────────────────
+.pester/
+tests/.pester/
+
+# ── Logs (mutation logs contain UPNs; regenerated per run) ───────────────────
+logs/
+*.log
+
+# ── Packaging / archives / input bundles ─────────────────────────────────────
+*.tar
+*.zip
+*.skill
+pdq-deploy/*.tar
+
+# ── Editor / OS cruft ────────────────────────────────────────────────────────
+.vs/
+*.swp
+.DS_Store
+Thumbs.db

@@ -1,0 +1,6 @@
+name: exchange-archive-mcp
+services:
+  exchange-mcp:
+    project: .
+    language: python
+    host: function

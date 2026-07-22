@@ -1,0 +1,52 @@
+# bicep-validate.yml
+# Validates Bicep templates on every PR touching foundry-iac/
+#
+# Auth (findings 7 & 12, remediated 2026-07-02):
+#   - OIDC federated credentials replace the AZURE_CREDENTIALS JSON secret.
+#     No long-lived SP secret is stored in the repo; the token is minted per run.
+#     Setup: create a federated credential on the CI app registration with
+#     subject 'repo:<org>/<repo>:pull_request', audience 'api://AzureADTokenExchange',
+#     then set repo VARIABLES (not secrets) AZURE_CLIENT_ID / AZURE_TENANT_ID /
+#     AZURE_SUBSCRIPTION_ID and DELETE the AZURE_CREDENTIALS secret.
+#   - The CI identity must be scoped to Reader + Template Deployment Operator
+#     on rg-ai-foundry-prod ONLY — never Contributor. Validate, never mutate.
+#   - what-if uses the default ResourceIdOnly result format. FullResourcePayloads
+#     resolves listKeys()/secret values into the retained Actions log — never use it here.
+
+name: Validate Bicep
+
+on:
+  pull_request:
+    paths:
+      - 'foundry-iac/**'
+
+permissions:
+  id-token: write   # required for OIDC token exchange
+  contents: read
+
+jobs:
+  validate:
+    name: Bicep What-If
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id:       ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Run Bicep what-if (prod)
+        run: |
+          az deployment group what-if \
+            --resource-group rg-ai-foundry-prod \
+            --template-file foundry-iac/main.bicep \
+            --parameters foundry-iac/parameters/prod.bicepparam
+
+      - name: Azure Logout
+        if: always()
+        run: az logout

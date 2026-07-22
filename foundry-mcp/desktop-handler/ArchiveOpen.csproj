@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    GIP Archive Open — giparchive: protocol handler.
+    Opens a specific Online Archive message in classic Outlook desktop by its
+    internet Message-ID, via late-bound Outlook COM (no PIA dependency).
+    See ../../plans/OUTLOOK-DESKTOP-OPEN-PLAN.md. Lookup key proven by
+    scripts/Test-OutlookArchiveOpen.ps1 (D0): PR_INTERNET_MESSAGE_ID proptag
+    0x1035001F equality across all mounted "Online Archive -*" stores.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>               <!-- windowless; no console flash -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>       <!-- Application.DoEvents pump + MessageBox -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>ArchiveOpen</AssemblyName>
+    <RootNamespace>Gip.ArchiveOpen</RootNamespace>
+    <Version>1.0.0</Version>
+    <Company>GI Partners</Company>
+    <Product>GIP Archive Open</Product>
+    <Description>Opens an Exchange Online Archive message in classic Outlook by Message-ID.</Description>
+    <!-- Self-contained single file so target workstations need no .NET runtime. -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+</Project>

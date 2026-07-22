@@ -1,0 +1,17 @@
+# Normalize line endings in the repo (LF), let Windows check out native.
+* text=auto
+
+# Scripts that are line-ending-sensitive stay LF.
+*.ps1   text eol=lf
+*.py    text eol=lf
+*.sh    text eol=lf
+*.bicep text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+
+# Binary
+*.png binary
+*.jpg binary
+*.pdf binary
+*.zip binary
+*.tar binary
