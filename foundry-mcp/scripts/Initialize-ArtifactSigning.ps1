@@ -1,4 +1,4 @@
-# Version: 1.0.0
+# Version: 1.1.0
 # Initialize-ArtifactSigning.ps1 — provisions the scriptable parts of Azure
 # Artifact Signing (formerly Trusted Signing) for code-signing ArchiveOpen.exe
 # and, as a bonus, this repo's PowerShell scripts.
@@ -48,6 +48,17 @@ function Ok  ($t) { Write-Host "  [PASS] $t" -ForegroundColor Green }
 function Info($t) { Write-Host "  [info] $t" -ForegroundColor DarkGray }
 function Warn($t) { Write-Host "  [warn] $t" -ForegroundColor Yellow }
 
+# Assign a role by trying the current "Artifact Signing ..." name first, then the
+# pre-rename "Trusted Signing ..." name (the service was renamed 2025-26). Returns
+# $true on success.
+function Grant-SigningRole ($assignee, $newName, $oldName, $scope) {
+    foreach ($role in @($newName, $oldName)) {
+        az role assignment create --assignee $assignee --role $role --scope $scope --output none 2>$null
+        if ($LASTEXITCODE -eq 0) { Ok "Granted '$role'."; return $true }
+    }
+    return $false
+}
+
 $logDir  = Join-Path $PSScriptRoot '..\logs'
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
 $logFile = Join-Path $logDir ('artifact-signing-{0:yyyyMMdd-HHmmss}.log' -f (Get-Date))
@@ -85,12 +96,12 @@ if ($Phase -eq 'Account') {
     # Identity Verifier role so the UPN can run identity validation in the portal.
     $verifierOid = az ad user show --id $IdentityVerifierUpn --query id -o tsv 2>$null
     if ($verifierOid) {
-        Info "Granting 'Trusted Signing Identity Verifier' to $IdentityVerifierUpn..."
+        Info "Granting the Identity Verifier role to $IdentityVerifierUpn..."
         LogMut "role assign Identity Verifier -> $IdentityVerifierUpn ($verifierOid) on $acctResourceId"
-        az role assignment create --assignee $verifierOid `
-            --role 'Trusted Signing Identity Verifier' --scope $acctResourceId --output none 2>$null
-        if ($LASTEXITCODE -eq 0) { Ok 'Identity Verifier role granted.' }
-        else { Warn "Role assign failed - assign 'Trusted Signing Identity Verifier' to $IdentityVerifierUpn on the account in the portal." }
+        if (-not (Grant-SigningRole $verifierOid 'Artifact Signing Identity Verifier' 'Trusted Signing Identity Verifier' $acctResourceId)) {
+            Warn "Role assign failed (needs Owner/User Access Administrator, or the account resource is missing)."
+            Warn "Assign 'Artifact Signing Identity Verifier' to $IdentityVerifierUpn in the portal: account -> Access control (IAM) -> Add role assignment."
+        }
     }
     else { Warn "Could not resolve $IdentityVerifierUpn; assign the Identity Verifier role manually in the portal." }
 
@@ -114,12 +125,11 @@ else {
     if (-not $SignerPrincipalId) { $SignerPrincipalId = az ad user show --id $IdentityVerifierUpn --query id -o tsv 2>$null }
     if ($SignerPrincipalId) {
         $profileScope = "$acctResourceId/certificateProfiles/$ProfileName"
-        Info "Granting 'Trusted Signing Certificate Profile Signer' to $SignerPrincipalId..."
+        Info "Granting the Certificate Profile Signer role to $SignerPrincipalId..."
         LogMut "role assign Signer -> $SignerPrincipalId on $profileScope"
-        az role assignment create --assignee $SignerPrincipalId `
-            --role 'Trusted Signing Certificate Profile Signer' --scope $profileScope --output none 2>$null
-        if ($LASTEXITCODE -eq 0) { Ok 'Signer role granted on the certificate profile.' }
-        else { Warn 'Signer role assign failed - assign it in the portal on the certificate profile.' }
+        if (-not (Grant-SigningRole $SignerPrincipalId 'Artifact Signing Certificate Profile Signer' 'Trusted Signing Certificate Profile Signer' $profileScope)) {
+            Warn "Signer role assign failed - assign 'Artifact Signing Certificate Profile Signer' on the certificate profile in the portal (IAM)."
+        }
     }
     else { Warn 'No SignerPrincipalId resolved; grant the Signer role manually.' }
 

@@ -51,11 +51,13 @@ Run the companion script (Phase Account):
 
 It registers the `Microsoft.CodeSigning` provider, creates the Artifact Signing
 account (`gipartifactsign` in `finresgroup`/eastus by default), and grants you the
-**Trusted Signing Identity Verifier** role so the portal will let you start
-validation. If the `az artifact-signing` extension fails to load (EDR has blocked
-other az extensions this session), create the account in the portal instead:
-**portal → search "Artifact Signing Accounts" → Create** (same RG/region/name),
-then continue below.
+**Artifact Signing Identity Verifier** role (renamed from "Trusted Signing Identity
+Verifier"; the script tries both) so the portal will let you start validation. If
+the `az artifact-signing` extension fails to load (EDR has blocked other az
+extensions this session) **or the role assignment warns**, do it in the portal:
+create the account (**Create a resource → "Artifact Signing" → Create**, same
+RG/region/name), then the account → **Access control (IAM) → Add role assignment →
+`Artifact Signing Identity Verifier` → assign to super-jmonaco**.
 
 ---
 
