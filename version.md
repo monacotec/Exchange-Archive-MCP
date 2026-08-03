@@ -31,7 +31,7 @@ Release: bump the file's internal version header → update its row here → tag
 
 | File | Version | Description |
 |------|---------|-------------|
-| `function_app.py` | 3.5.0 | SPEED: prewarm export on estimate-success (search + status return export_operation_id) so the ~50s report overlaps; results reuses it. Always emits open_url + open_desktop_url + a surface-the-links hint. (3.4.0: anti-hang poll 40→15s) |
+| `function_app.py` | 3.6.0 | Honest jump-link guidance: open_desktop_url (giparchive) is the reliable archive path; open_url (OWA) best-effort only (immutable-vs-EWS id + archive scope → "moved or deleted"); internet_message_id as no-install search fallback. (3.5.0: prewarm export on estimate-success) |
 | `ediscovery.py` | 1.7.0 | ensure_export() dedupe cache (prewarm ↔ results converge on one export); specific download errors; giparchive_url(); one-case-per-caller |
 | `desktop-handler/ArchiveOpen.csproj` | 1.0.0 | .NET 8 self-contained WinExe project for the giparchive: handler |
 | `desktop-handler/Program.cs` | 1.0.0 | Message-ID validation, Outlook COM AdvancedSearch (proptag 0x1035001F), Display, OWA fallback, logging |

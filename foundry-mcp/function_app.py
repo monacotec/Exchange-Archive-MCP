@@ -1,7 +1,7 @@
 """
 foundry-mcp/function_app.py
 Exchange Online Archive MCP Server — Azure Functions Python v2 model
-Version: 3.5.0
+Version: 3.6.0
 
 Rewritten 2026-07-13 on the Azure-Samples/remote-mcp-functions-python (GA extension)
 pattern, replacing the rev-1 draft. Key changes:
@@ -719,7 +719,7 @@ async def archive_get_search_status(context: MCPToolContext, search_id: str) -> 
 @app.mcp_tool_property(arg_name="export_operation_id", description="Operation id returned by a previous archive_get_search_results call whose report was still generating. Omit on the first call.", is_required=False)
 @app.mcp_tool_property(arg_name="top", description="Maximum items to return (1-100, default 20).", is_required=False)
 async def archive_get_search_results(context: MCPToolContext, search_id: str, export_operation_id: str = "", top: str = "20") -> str:
-    """Retrieve per-item metadata for a completed eDiscovery archive search: subject, sender, date, archive folder, plus open_url (opens the message in Outlook on the web) and open_desktop_url (opens it in classic Outlook desktop). Always present BOTH jump links per message. The eDiscovery report export is asynchronous (~up to a minute), so this tool returns FAST and is poll-based: if status is 'report_generating' it returns an export_operation_id — call this tool again with BOTH search_id and that export_operation_id every ~20 seconds until status is 'complete'. This is expected, not an error; do not give up after the first call. Pass the export_operation_id from search_archive_mail / archive_get_search_status when present to skip straight ahead."""
+    """Retrieve per-item metadata for a completed eDiscovery archive search: subject, sender, date, archive folder, internet_message_id, plus open_desktop_url (opens the message in classic Outlook via the giparchive handler — the reliable path for archive messages) and open_url (Outlook on the web — best-effort; often fails for archive items). Present open_desktop_url and internet_message_id per message. The eDiscovery report export is asynchronous (~up to a minute), so this tool returns FAST and is poll-based: if status is 'report_generating' it returns an export_operation_id — call this tool again with BOTH search_id and that export_operation_id every ~20 seconds until status is 'complete'. This is expected, not an error; do not give up after the first call. Pass the export_operation_id from search_archive_mail / archive_get_search_status when present to skip straight ahead."""
     caller = {}
     try:
         caller = _get_caller(context)
@@ -807,10 +807,15 @@ async def archive_get_search_results(context: MCPToolContext, search_id: str, ex
             "returned": len(items),
             "truncated": count > len(items),
             "items": items,
-            "hint": ("Each item has open_url (opens in Outlook on the web) and "
-                     "open_desktop_url (opens in classic Outlook via the giparchive "
-                     "handler). Always show BOTH links per message so the user can "
-                     "jump straight to it."),
+            "hint": ("To open a message: open_desktop_url opens it in classic Outlook "
+                     "via the giparchive handler — the reliable path for ARCHIVE "
+                     "messages (requires the handler installed on the workstation). "
+                     "open_url (Outlook on the web) is BEST-EFFORT and often fails for "
+                     "archive items ('message moved or deleted') because eDiscovery "
+                     "returns an immutable id, not an EWS id. Reliable no-install "
+                     "fallback: paste the internet_message_id into the Outlook/OWA "
+                     "search box. Present open_desktop_url and internet_message_id per "
+                     "message; offer open_url only as best-effort."),
         }
         # Surface the report's real column headers so any unmapped field (e.g.
         # folder path) can be pinned to its actual name rather than guessed.
