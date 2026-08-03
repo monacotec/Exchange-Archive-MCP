@@ -1,7 +1,7 @@
 """
 foundry-mcp/function_app.py
 Exchange Online Archive MCP Server — Azure Functions Python v2 model
-Version: 3.4.0
+Version: 3.5.0
 
 Rewritten 2026-07-13 on the Azure-Samples/remote-mcp-functions-python (GA extension)
 pattern, replacing the rev-1 draft. Key changes:
@@ -247,29 +247,39 @@ def _is_archive_unaddressable(ex: Exception) -> bool:
 
 
 async def _ediscovery_estimate(session, caller: dict, kql: str) -> dict:
-    """Create a caller-scoped eDiscovery search, start its estimate, poll briefly."""
+    """Create a caller-scoped eDiscovery search, start its estimate, poll briefly.
+
+    If the estimate finishes in-call, PREWARM the export immediately so the
+    ~50s report generation overlaps the caller's move to archive_get_search_results.
+    """
     token = await _app_graph_token()
     client = ediscovery.EDiscoveryClient(session, token, caller)
     search_id = await client.create_search(kql)
     await client.start_estimate(search_id)
     est = await client.poll_estimate(search_id, budget_seconds=40)
     est["search_id"] = search_id
+    if est["status"] == "succeeded" and 0 < est["count"] <= ediscovery.EXPORT_ITEM_LIMIT:
+        try:
+            est["export_operation_id"] = await client.ensure_export(search_id)
+        except Exception as ex:
+            logger.warning("prewarm export failed for %s: %s", search_id, ex)
     return est
 
 
 def _ediscovery_response(tool: str, caller: dict, params: dict, kql: str, est: dict) -> str:
     _audit(tool, caller, {**params, "data_path": "ediscovery"}, est["status"], est["count"])
-    note = ("Archive reached via Purview eDiscovery (Graph mail API cannot address "
-            "this archive). This is the match COUNT only. To get the actual messages "
-            "(subject/sender/date/folder), call archive_get_search_results with this "
-            "search_id — it returns quickly and, if the report is still generating, "
-            "hands back an export_operation_id to poll with; keep calling until "
-            "status is 'complete' (usually under a minute total).")
+    export_op = est.get("export_operation_id", "")
+    note = ("Archive reached via Purview eDiscovery. This is the match COUNT only. "
+            "For the actual messages (subject/sender/date/folder + open_url and "
+            "open_desktop_url jump links), call archive_get_search_results with this "
+            "search_id" + (f" AND export_operation_id={export_op}" if export_op else "") +
+            ". It returns fast; if still generating, keep calling with the "
+            "export_operation_id until status is 'complete' (usually under a minute).")
     if est["status"] == "running":
         note = ("The estimate is still running - call archive_get_search_status with "
                 "this search_id until it reports 'succeeded', then call "
                 "archive_get_search_results.")
-    return json.dumps({
+    resp = {
         "data_path": "ediscovery",
         "kql": kql,
         "status": est["status"],
@@ -277,7 +287,10 @@ def _ediscovery_response(tool: str, caller: dict, params: dict, kql: str, est: d
         "matched_size_bytes": est["size"],
         "search_id": est["search_id"],
         "note": note,
-    })
+    }
+    if export_op:
+        resp["export_operation_id"] = export_op   # prewarmed; pass to results
+    return json.dumps(resp)
 
 
 # ── Graph helpers (delegated /me — the token itself scopes access) ────────────
@@ -668,18 +681,35 @@ async def archive_get_search_status(context: MCPToolContext, search_id: str) -> 
             token = await _app_graph_token()
             client = ediscovery.EDiscoveryClient(session, token, caller)
             est = await client.poll_estimate(search_id, budget_seconds=30)
+            # Prewarm the export the moment the estimate succeeds, so it generates
+            # in the background before archive_get_search_results is called.
+            export_op = ""
+            if est["status"] == "succeeded" and 0 < est["count"] <= ediscovery.EXPORT_ITEM_LIMIT:
+                try:
+                    export_op = await client.ensure_export(search_id)
+                except Exception as ex:
+                    logger.warning("prewarm export failed for %s: %s", search_id, ex)
         _audit("archive_get_search_status", caller, {"search_id": search_id, "data_path": "ediscovery"}, est["status"], est["count"])
-        note = ""
         if est["status"] == "running":
             note = "Still running - poll again in ~30 seconds."
-        return json.dumps({
+        elif export_op:
+            note = (f"Report export already started (export_operation_id={export_op}). "
+                    "Call archive_get_search_results with this search_id AND that "
+                    "export_operation_id to get the messages (with open_url / "
+                    "open_desktop_url jump links) fast.")
+        else:
+            note = "Estimate complete - call archive_get_search_results with this search_id."
+        resp = {
             "data_path": "ediscovery",
             "search_id": search_id,
             "status": est["status"],
             "matched_count": est["count"],
             "matched_size_bytes": est["size"],
             "note": note,
-        })
+        }
+        if export_op:
+            resp["export_operation_id"] = export_op
+        return json.dumps(resp)
     except Exception as ex:
         return _error("archive_get_search_status", caller, ex)
 
@@ -689,7 +719,7 @@ async def archive_get_search_status(context: MCPToolContext, search_id: str) -> 
 @app.mcp_tool_property(arg_name="export_operation_id", description="Operation id returned by a previous archive_get_search_results call whose report was still generating. Omit on the first call.", is_required=False)
 @app.mcp_tool_property(arg_name="top", description="Maximum items to return (1-100, default 20).", is_required=False)
 async def archive_get_search_results(context: MCPToolContext, search_id: str, export_operation_id: str = "", top: str = "20") -> str:
-    """Retrieve per-item metadata (subject, sender, date, archive folder) for a completed eDiscovery archive search. The eDiscovery report export is asynchronous (~up to a minute), so this tool returns FAST and is poll-based: if status is 'report_generating' it returns an export_operation_id — call this tool again with BOTH search_id and that export_operation_id every ~20 seconds until status is 'complete'. This is expected, not an error; do not give up after the first call."""
+    """Retrieve per-item metadata for a completed eDiscovery archive search: subject, sender, date, archive folder, plus open_url (opens the message in Outlook on the web) and open_desktop_url (opens it in classic Outlook desktop). Always present BOTH jump links per message. The eDiscovery report export is asynchronous (~up to a minute), so this tool returns FAST and is poll-based: if status is 'report_generating' it returns an export_operation_id — call this tool again with BOTH search_id and that export_operation_id every ~20 seconds until status is 'complete'. This is expected, not an error; do not give up after the first call. Pass the export_operation_id from search_archive_mail / archive_get_search_status when present to skip straight ahead."""
     caller = {}
     try:
         caller = _get_caller(context)
@@ -724,11 +754,11 @@ async def archive_get_search_results(context: MCPToolContext, search_id: str, ex
                              "(add sender, subject terms, or a tighter date range) and search again."),
                 })
 
-            # Start or resume the report export. Poll only briefly in-call
-            # (eDiscovery report generation runs ~up to a minute) so the tool
-            # returns FAST and never blocks the MCP client — the caller polls by
-            # calling again with export_operation_id (see the tool description).
-            op_id = export_operation_id or await client.start_export_report(search_id)
+            # Resume the passed export, else reuse the prewarmed one (or start it).
+            # ensure_export dedupes so status-prewarm and this call share one export.
+            # Poll only briefly in-call so the tool returns FAST and never blocks
+            # the MCP client — the caller polls by calling again with export_operation_id.
+            op_id = export_operation_id or await client.ensure_export(search_id)
             waited = 0
             poll_budget = 15
             while True:
@@ -777,6 +807,10 @@ async def archive_get_search_results(context: MCPToolContext, search_id: str, ex
             "returned": len(items),
             "truncated": count > len(items),
             "items": items,
+            "hint": ("Each item has open_url (opens in Outlook on the web) and "
+                     "open_desktop_url (opens in classic Outlook via the giparchive "
+                     "handler). Always show BOTH links per message so the user can "
+                     "jump straight to it."),
         }
         # Surface the report's real column headers so any unmapped field (e.g.
         # folder path) can be pinned to its actual name rather than guessed.

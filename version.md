@@ -31,8 +31,8 @@ Release: bump the file's internal version header → update its row here → tag
 
 | File | Version | Description |
 |------|---------|-------------|
-| `function_app.py` | 3.4.0 | BUGFIX: archive_get_search_results no longer blocks ~40s (poll 40→15s, session 90→35s) — fast + poll-based; logs failed export op; adds open_desktop_url; E2 flow |
-| `ediscovery.py` | 1.6.0 | BUGFIX observability: download_report_items raises specific errors; giparchive_url(); one-case-per-caller; E2 exportReport flow |
+| `function_app.py` | 3.5.0 | SPEED: prewarm export on estimate-success (search + status return export_operation_id) so the ~50s report overlaps; results reuses it. Always emits open_url + open_desktop_url + a surface-the-links hint. (3.4.0: anti-hang poll 40→15s) |
+| `ediscovery.py` | 1.7.0 | ensure_export() dedupe cache (prewarm ↔ results converge on one export); specific download errors; giparchive_url(); one-case-per-caller |
 | `desktop-handler/ArchiveOpen.csproj` | 1.0.0 | .NET 8 self-contained WinExe project for the giparchive: handler |
 | `desktop-handler/Program.cs` | 1.0.0 | Message-ID validation, Outlook COM AdvancedSearch (proptag 0x1035001F), Display, OWA fallback, logging |
 | `desktop-handler/build.ps1` | 1.0.0 | dotnet publish single-file + optional Artifact Signing signtool sign/verify |

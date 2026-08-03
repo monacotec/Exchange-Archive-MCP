@@ -1,7 +1,7 @@
 """
 foundry-mcp/ediscovery.py
 Purview eDiscovery data path for the Exchange Archive MCP.
-Version: 1.6.0
+Version: 1.7.0
 
 Why this exists: Microsoft Graph's Mail API cannot read In-Place Archives (see
 docs/online-archive-graph-findings.md), and the executive population includes
@@ -65,6 +65,7 @@ EXPORT_ITEM_LIMIT = int(os.environ.get("EDISCOVERY_EXPORT_ITEM_LIMIT", "500"))
 # In-process caches (per worker), keyed by caller oid.
 _case_cache: dict = {}   # oid -> case id
 _nc_source_cache: dict = {}  # oid -> noncustodialDataSource id
+_export_cache: dict = {}  # "oid:search_id" -> export operation id (prewarm dedupe)
 
 
 class EDiscoveryClient:
@@ -262,6 +263,22 @@ class EDiscoveryClient:
         if not m:
             raise RuntimeError(f"exportReport accepted but no operation id in Location: {location[:120]}")
         return m.group(1)
+
+    async def ensure_export(self, search_id: str) -> str:
+        """Start the report export for a search, or reuse the one already started.
+
+        Deduped per worker by oid+search_id so the prewarm (kicked when the
+        estimate succeeds) and a later archive_get_search_results converge on the
+        SAME export instead of spawning duplicates. This is what lets the export
+        generate in the background while the caller moves from status -> results.
+        """
+        oid = self._caller.get("oid") or self._caller["upn"].lower()
+        key = f"{oid}:{search_id}"
+        if key in _export_cache:
+            return _export_cache[key]
+        op_id = await self.start_export_report(search_id)
+        _export_cache[key] = op_id
+        return op_id
 
     async def get_operation(self, operation_id: str) -> dict:
         case = await self._case()
