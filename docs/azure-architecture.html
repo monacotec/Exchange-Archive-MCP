@@ -1,0 +1,159 @@
+<style>
+  :root{
+    --ground:#F5F7F8; --surface:#FFFFFF; --ink:#182029; --muted:#586474;
+    --line:#E4E8ED; --accent:#0F625E; --accent-soft:#E5F0EF;
+    --good:#2E7D57; --good-soft:#E6F1EA; --good-ink:#1F5D40;
+    --chip:#FBFCFD;
+    --shadow:0 1px 2px rgba(24,32,41,.04), 0 8px 24px rgba(24,32,41,.06);
+    --serif:Georgia,"Iowan Old Style","Times New Roman",serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --ground:#0D1316; --surface:#141B1F; --ink:#EAF0F2; --muted:#9AA7B2;
+      --line:#233138; --accent:#54CFC5; --accent-soft:#102E2C;
+      --good:#5BC28C; --good-soft:#14291F; --good-ink:#7FD4A5; --chip:#101619;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"]{
+    --ground:#F5F7F8; --surface:#FFFFFF; --ink:#182029; --muted:#586474;
+    --line:#E4E8ED; --accent:#0F625E; --accent-soft:#E5F0EF;
+    --good:#2E7D57; --good-soft:#E6F1EA; --good-ink:#1F5D40; --chip:#FBFCFD;
+    --shadow:0 1px 2px rgba(24,32,41,.04), 0 8px 24px rgba(24,32,41,.06);
+  }
+  :root[data-theme="dark"]{
+    --ground:#0D1316; --surface:#141B1F; --ink:#EAF0F2; --muted:#9AA7B2;
+    --line:#233138; --accent:#54CFC5; --accent-soft:#102E2C;
+    --good:#5BC28C; --good-soft:#14291F; --good-ink:#7FD4A5; --chip:#101619;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box}
+  .wrap{font-family:var(--sans); background:var(--ground); color:var(--ink);
+    line-height:1.5; -webkit-font-smoothing:antialiased; min-height:100vh; padding:clamp(20px,4vw,56px) 16px;}
+  .sheet{max-width:960px; margin:0 auto; background:var(--surface); border:1px solid var(--line);
+    border-radius:14px; box-shadow:var(--shadow); padding:clamp(24px,4vw,52px);}
+
+  .eyebrow{font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); font-weight:600; margin:0 0 12px;}
+  h1{font-family:var(--serif); font-weight:600; font-size:clamp(1.7rem,4vw,2.5rem); line-height:1.1; margin:0 0 10px; letter-spacing:-.01em; text-wrap:balance;}
+  .thesis{font-size:clamp(1rem,2vw,1.12rem); color:var(--muted); margin:0; max-width:64ch;}
+  .meta{display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:18px; font-size:.8rem; color:var(--muted); font-variant-numeric:tabular-nums;}
+  .meta span{display:inline-flex; align-items:center; gap:7px}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block}
+  .rule{height:1px;background:var(--line);border:0;margin:28px 0}
+
+  /* Primary request path */
+  .flow-label{font-size:.74rem;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:0 0 14px}
+  .flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px}
+  .flow .fstep{flex:1 1 128px; min-width:120px; background:var(--accent-soft);
+    border:1px solid color-mix(in srgb,var(--accent) 28%,transparent); border-radius:10px; padding:11px 13px;}
+  .flow .fstep .fn{font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  .flow .fstep .ft{font-size:.85rem;color:var(--ink);margin-top:3px;line-height:1.3}
+  .flow .arrow{align-self:center;color:var(--accent);font-size:1.1rem;flex:0 0 auto}
+  @media (max-width:680px){ .flow .arrow{transform:rotate(90deg)} .flow .fstep{flex-basis:100%} }
+
+  /* Zones */
+  .zone{margin-top:26px}
+  .zone-head{display:flex;align-items:baseline;gap:12px;margin:0 0 14px}
+  .zone-head .zn{font-family:var(--serif);font-size:1.05rem;color:var(--ink);font-weight:600}
+  .zone-head .zc{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:12px}
+
+  .chip{background:var(--chip);border:1px solid var(--line);border-radius:11px;padding:13px 14px;position:relative;overflow:hidden}
+  .chip::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line)}
+  .chip.key::before{background:var(--accent)}
+  .chip .cat{font-size:.63rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .chip .nm{font-family:var(--mono);font-size:.82rem;color:var(--ink);margin:4px 0 5px;word-break:break-word;line-height:1.35}
+  .chip .rl{font-size:.82rem;color:var(--muted);line-height:1.4}
+  .pos{display:inline-block;margin-top:7px;font-size:.63rem;letter-spacing:.05em;text-transform:uppercase;font-weight:700;
+    color:var(--good-ink);background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 26%,transparent);border-radius:100px;padding:2px 8px}
+
+  footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);font-size:.76rem;color:var(--muted)}
+  footer code{font-family:var(--mono);font-size:.9em;color:var(--ink)}
+
+  @media (prefers-reduced-motion:no-preference){
+    .anim{opacity:0;transform:translateY(9px);animation:rise .5s ease forwards}
+    .zone:nth-of-type(1){animation-delay:.05s}.zone:nth-of-type(2){animation-delay:.12s}
+    .zone:nth-of-type(3){animation-delay:.19s}.zone:nth-of-type(4){animation-delay:.26s}
+    @keyframes rise{to{opacity:1;transform:none}}
+  }
+  @media print{.wrap{background:#fff;padding:0}.sheet{box-shadow:none;border:none;max-width:none}.anim{opacity:1!important;transform:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+  <article class="sheet">
+    <p class="eyebrow">Internal IT &amp; Security · Architecture Map</p>
+    <h1>Exchange Archive MCP — Azure footprint &amp; accounts</h1>
+    <p class="thesis">The resources, identities, and data path behind archived-email access for AI assistants. All Azure resources live in one shared resource group; archive data is reached through Purview eDiscovery, never stored by us.</p>
+    <div class="meta">
+      <span><i class="dot"></i>Subscription: Azure subscription 1</span>
+      <span>Resource group: finresgroup</span>
+      <span>Region: East US</span>
+      <span>Tenant: gipartners.com</span>
+    </div>
+
+    <hr class="rule"/>
+
+    <p class="flow-label">Primary request path — a user's archive search</p>
+    <div class="flow">
+      <div class="fstep"><div class="fn">Client</div><div class="ft">Claude Desktop connector</div></div>
+      <div class="arrow">→</div>
+      <div class="fstep"><div class="fn">Gate</div><div class="ft">Easy Auth verifies the signed-in user</div></div>
+      <div class="arrow">→</div>
+      <div class="fstep"><div class="fn">App</div><div class="ft">Function App (MCP server)</div></div>
+      <div class="arrow">→</div>
+      <div class="fstep"><div class="fn">Reach</div><div class="ft">Purview eDiscovery, per-user case</div></div>
+      <div class="arrow">→</div>
+      <div class="fstep"><div class="fn">Data</div><div class="ft">Exchange Online In-Place Archive</div></div>
+    </div>
+
+    <section class="zone anim">
+      <div class="zone-head"><span class="zn">People &amp; client</span><span class="zc">who connects</span></div>
+      <div class="grid">
+        <div class="chip key"><div class="cat">Client</div><div class="nm">Claude Desktop</div><div class="rl">Custom MCP connector; OAuth 2.1 + PKCE, signs in as the end user.</div></div>
+        <div class="chip"><div class="cat">User · E5</div><div class="nm">jmonaco@gipartners.com</div><div class="rl">The caller. Searches run only against this person's own archive.</div></div>
+        <div class="chip"><div class="cat">Admin · E1</div><div class="nm">super-jmonaco@gipartners.com</div><div class="rl">Operator. Runs the setup / rotation / diagnostic scripts.</div></div>
+      </div>
+    </section>
+
+    <section class="zone anim">
+      <div class="zone-head"><span class="zn">Microsoft Entra ID</span><span class="zc">identity &amp; permissions</span></div>
+      <div class="grid">
+        <div class="chip key"><div class="cat">App registration</div><div class="nm">Exchange Archive MCP · 9519ca68</div><div class="rl">Exposes api://exchange-mcp (Archive.Read). Public-client callbacks for the connector.</div></div>
+        <div class="chip"><div class="cat">Service principal</div><div class="nm">app roles</div><div class="rl">Graph eDiscovery.Read.All + ReadWrite.All; MicrosoftPurviewEDiscovery eDiscovery.Download.Read.</div></div>
+        <div class="chip"><div class="cat">Credential</div><div class="nm">federated identity (WIF)</div><div class="rl">Links the user-assigned identity to the app reg for secret-free OBO.<span class="pos">secret-free</span></div></div>
+        <div class="chip"><div class="cat">Purview role</div><div class="nm">eDiscovery Manager</div><div class="rl">App is a member — the grant that lets it run archive searches.</div></div>
+        <div class="chip"><div class="cat">First-party app</div><div class="nm">MicrosoftPurviewEDiscovery · b26e684c</div><div class="rl">Resource the app tokens against to download export reports.</div></div>
+      </div>
+    </section>
+
+    <section class="zone anim">
+      <div class="zone-head"><span class="zn">Azure resources</span><span class="zc">resource group · finresgroup</span></div>
+      <div class="grid">
+        <div class="chip key"><div class="cat">Compute</div><div class="nm">func-exchange-mcp-archive-mailbox-mcp</div><div class="rl">The MCP server (Flex Consumption). System-assigned identity reads Key Vault.</div></div>
+        <div class="chip"><div class="cat">Plan</div><div class="nm">asp-exchange-mcp-…-mcp</div><div class="rl">Flex Consumption (FC1) hosting plan.</div></div>
+        <div class="chip key"><div class="cat">Secrets</div><div class="nm">kv-exmcp-gi</div><div class="rl">Key Vault — Entra client id/secret, JWT audience/issuer/JWKS. RBAC + purge protection; audit to Log Analytics.</div></div>
+        <div class="chip"><div class="cat">Storage</div><div class="nm">saexmcp6kgb4xbh7g</div><div class="rl">Function host storage.<span class="pos">keyless / shared-key off</span></div></div>
+        <div class="chip"><div class="cat">Identity</div><div class="nm">uai-exchange-mcp-…-mcp</div><div class="rl">User-assigned identity — WIF assertion + host-storage access.</div></div>
+        <div class="chip"><div class="cat">Observability</div><div class="nm">appi- / law-exchange-mcp-…-mcp</div><div class="rl">App Insights + Log Analytics — the authoritative per-call audit sink.</div></div>
+        <div class="chip"><div class="cat">Discovery</div><div class="nm">apic-exmcp-gi</div><div class="rl">API Center — organizational MCP tool catalog.</div></div>
+        <div class="chip"><div class="cat">Foundry</div><div class="nm">gi-exchange-archive-mcp-resource</div><div class="rl">Foundry account + project for agent discoverability (own logs / App Insights).</div></div>
+      </div>
+    </section>
+
+    <section class="zone anim">
+      <div class="zone-head"><span class="zn">Microsoft 365 data path</span><span class="zc">external services · no data stored by us</span></div>
+      <div class="grid">
+        <div class="chip"><div class="cat">API</div><div class="nm">Microsoft Graph</div><div class="rl">On-behalf-of (Mail.Read) tried first; app-only for eDiscovery. Cannot address the archive directly — hence eDiscovery.</div></div>
+        <div class="chip key"><div class="cat">Service</div><div class="nm">Purview eDiscovery</div><div class="rl">One app-owned case per caller; search → estimate → report-only export. Reaches auto-expanding archives.<span class="pos">per-user isolated</span></div></div>
+        <div class="chip"><div class="cat">Mailbox</div><div class="nm">Exchange Online · In-Place Archive</div><div class="rl">The archived email itself — the system of record; read, never copied.</div></div>
+      </div>
+    </section>
+
+    <footer>
+      Identity-based, keyless where possible; no secret values leave Key Vault. Retired in migration: <code>kv-exmcp-m63g6qb2pp</code> (soft-deleted). Full machine-readable inventory: <code>Export-AzureInventory.ps1</code> → <code>foundry-mcp/inventory/</code>.
+    </footer>
+  </article>
+</div>

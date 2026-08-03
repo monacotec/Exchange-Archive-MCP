@@ -1,0 +1,217 @@
+<style>
+  :root {
+    --ground:#F5F7F8; --surface:#FFFFFF; --ink:#182029; --muted:#586474;
+    --line:#E4E8ED; --accent:#0F625E; --accent-soft:#E5F0EF;
+    --good:#2E7D57; --good-soft:#E6F1EA; --good-ink:#1F5D40;
+    --pending:#A2680F; --pending-soft:#F6ECD8; --pending-ink:#7E5109;
+    --shadow:0 1px 2px rgba(24,32,41,.04), 0 8px 24px rgba(24,32,41,.06);
+    --serif:Georgia,"Iowan Old Style","Times New Roman",serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --ground:#0D1316; --surface:#141B1F; --ink:#EAF0F2; --muted:#9AA7B2;
+      --line:#233138; --accent:#54CFC5; --accent-soft:#102E2C;
+      --good:#5BC28C; --good-soft:#14291F; --good-ink:#7FD4A5;
+      --pending:#E2AC4E; --pending-soft:#2C2410; --pending-ink:#EDC079;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"]{
+    --ground:#F5F7F8; --surface:#FFFFFF; --ink:#182029; --muted:#586474;
+    --line:#E4E8ED; --accent:#0F625E; --accent-soft:#E5F0EF;
+    --good:#2E7D57; --good-soft:#E6F1EA; --good-ink:#1F5D40;
+    --pending:#A2680F; --pending-soft:#F6ECD8; --pending-ink:#7E5109;
+    --shadow:0 1px 2px rgba(24,32,41,.04), 0 8px 24px rgba(24,32,41,.06);
+  }
+  :root[data-theme="dark"]{
+    --ground:#0D1316; --surface:#141B1F; --ink:#EAF0F2; --muted:#9AA7B2;
+    --line:#233138; --accent:#54CFC5; --accent-soft:#102E2C;
+    --good:#5BC28C; --good-soft:#14291F; --good-ink:#7FD4A5;
+    --pending:#E2AC4E; --pending-soft:#2C2410; --pending-ink:#EDC079;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box}
+  .brief{
+    font-family:var(--sans); background:var(--ground); color:var(--ink);
+    line-height:1.55; -webkit-font-smoothing:antialiased;
+    min-height:100vh; padding:clamp(20px,4vw,56px) 16px;
+  }
+  .sheet{
+    max-width:860px; margin:0 auto; background:var(--surface);
+    border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow);
+    padding:clamp(24px,4vw,52px);
+  }
+
+  .eyebrow{
+    font-size:.72rem; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--accent); font-weight:600; margin:0 0 14px;
+  }
+  h1{
+    font-family:var(--serif); font-weight:600; color:var(--ink);
+    font-size:clamp(1.75rem,4.2vw,2.6rem); line-height:1.1; margin:0 0 12px;
+    text-wrap:balance; letter-spacing:-.01em;
+  }
+  .thesis{ font-size:clamp(1.02rem,2vw,1.18rem); color:var(--muted); margin:0; max-width:60ch; text-wrap:pretty; }
+  .meta{
+    display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:20px;
+    font-size:.8rem; color:var(--muted); font-variant-numeric:tabular-nums;
+  }
+  .meta span{display:inline-flex; align-items:center; gap:7px}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block}
+
+  .rule{height:1px;background:var(--line);border:0;margin:30px 0}
+
+  .verdict{
+    background:var(--accent-soft); border:1px solid color-mix(in srgb,var(--accent) 30%, transparent);
+    border-radius:11px; padding:18px 20px; display:flex; gap:15px; align-items:flex-start;
+  }
+  .verdict .mark{
+    flex:none; width:34px;height:34px;border-radius:9px; background:var(--accent);
+    color:#fff; display:grid;place-items:center; font-family:var(--serif); font-size:1.15rem; font-weight:700;
+  }
+  .verdict h2{margin:0 0 4px; font-size:1rem; letter-spacing:.01em}
+  .verdict p{margin:0; color:var(--muted); font-size:.92rem}
+
+  .section-label{
+    font-size:.74rem; letter-spacing:.13em; text-transform:uppercase;
+    color:var(--muted); font-weight:600; margin:34px 0 18px;
+  }
+
+  /* Timeline — a real chronological sequence */
+  .timeline{list-style:none;margin:0;padding:0;position:relative}
+  .timeline::before{
+    content:"";position:absolute; left:9px; top:6px; bottom:6px; width:2px;
+    background:linear-gradient(var(--line),var(--line));
+  }
+  .step{position:relative; padding:0 0 22px 38px}
+  .step:last-child{padding-bottom:0}
+  .node{
+    position:absolute; left:0; top:2px; width:20px;height:20px;border-radius:50%;
+    background:var(--surface); border:2px solid var(--accent); display:grid;place-items:center;
+  }
+  .node::after{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent)}
+  .step h3{margin:0 0 3px; font-size:1rem; font-weight:650; color:var(--ink); display:flex; flex-wrap:wrap; align-items:center; gap:10px}
+  .step p{margin:0; color:var(--muted); font-size:.9rem; max-width:64ch}
+
+  .tag{
+    font-size:.66rem; letter-spacing:.06em; text-transform:uppercase; font-weight:700;
+    padding:2px 9px; border-radius:100px; white-space:nowrap; border:1px solid transparent;
+  }
+  .tag.done{background:var(--good-soft); color:var(--good-ink); border-color:color-mix(in srgb,var(--good) 28%,transparent)}
+  .tag.prog{background:var(--pending-soft); color:var(--pending-ink); border-color:color-mix(in srgb,var(--pending) 32%,transparent)}
+  .tag.turn{background:var(--accent-soft); color:var(--accent); border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
+
+  .cols{display:grid; grid-template-columns:1fr 1fr; gap:28px; margin-top:6px}
+  @media (max-width:620px){ .cols{grid-template-columns:1fr; gap:24px} }
+  .cols h4{margin:0 0 12px; font-size:.95rem; color:var(--ink)}
+  .list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:11px}
+  .list li{position:relative; padding-left:20px; font-size:.9rem; color:var(--muted); line-height:1.45}
+  .list li::before{content:"";position:absolute;left:2px;top:.55em;width:6px;height:6px;border-radius:2px;background:var(--accent)}
+  .list.muted li::before{background:var(--muted);opacity:.6}
+
+  footer{margin-top:34px; padding-top:18px; border-top:1px solid var(--line); font-size:.78rem; color:var(--muted)}
+
+  @media (prefers-reduced-motion:no-preference){
+    .reveal{opacity:0; transform:translateY(10px); animation:rise .6s cubic-bezier(.2,.7,.3,1) forwards}
+    .step{opacity:0; transform:translateY(8px); animation:rise .5s ease forwards}
+    .step:nth-child(1){animation-delay:.05s}.step:nth-child(2){animation-delay:.12s}
+    .step:nth-child(3){animation-delay:.19s}.step:nth-child(4){animation-delay:.26s}
+    .step:nth-child(5){animation-delay:.33s}.step:nth-child(6){animation-delay:.40s}
+    .step:nth-child(7){animation-delay:.47s}
+    @keyframes rise{to{opacity:1;transform:none}}
+  }
+  @media print{
+    .brief{background:#fff;padding:0}
+    .sheet{box-shadow:none;border:none;max-width:none}
+    .step,.reveal{opacity:1 !important;transform:none !important;animation:none !important}
+  }
+</style>
+
+<div class="brief">
+  <article class="sheet">
+    <p class="eyebrow reveal">Internal IT &amp; Security · Progress Brief</p>
+    <h1 class="reveal">Giving our AI assistants secure access to archived email</h1>
+    <p class="thesis reveal">A way for approved AI assistants to search employees' <strong>archived</strong> mailboxes — including executives' large auto-expanding archives — with each person able to see only their own email.</p>
+    <div class="meta reveal">
+      <span><i class="dot"></i>July 21–24, 2026</span>
+      <span>Four working days</span>
+      <span>Status: working, hardening in progress</span>
+    </div>
+
+    <hr class="rule"/>
+
+    <div class="verdict reveal">
+      <div class="mark">✓</div>
+      <div>
+        <h2>Bottom line — it works today</h2>
+        <p>Archived-email search functions end to end for every mailbox type, confirmed against a real message the standard tools couldn't reach. What remains is hardening and rollout, not core capability.</p>
+      </div>
+    </div>
+
+    <p class="section-label">How we got here</p>
+    <ol class="timeline">
+      <li class="step">
+        <span class="node"></span>
+        <h3>Security review &amp; cloud tidy-up <span class="tag done">Done</span></h3>
+        <p>Worked through a 49-item security checklist and closed the gaps, then consolidated a key security vault and removed leftover test resources — with no interruption to the running service.</p>
+      </li>
+      <li class="step">
+        <span class="node"></span>
+        <h3>Connected the assistant <span class="tag done">Done</span></h3>
+        <p>Cleared a series of Microsoft sign-in configuration hurdles so a user can connect and be authenticated as themselves.</p>
+      </li>
+      <li class="step">
+        <span class="node"></span>
+        <h3>A major roadblock — and it wasn't ours <span class="tag turn">Turning point</span></h3>
+        <p>We found that Microsoft's standard programming interface simply cannot read the archive mailbox — a capability Microsoft hasn't shipped yet. We proved this thoroughly rather than assume it, so no effort was wasted chasing a dead end.</p>
+      </li>
+      <li class="step">
+        <span class="node"></span>
+        <h3>Found a compliant path that works <span class="tag done">Done</span></h3>
+        <p>Routed archive access through Microsoft Purview eDiscovery — the supported, enterprise service that can reach archives, including the executives' large ones — with each user's searches fully walled off in their own case. Verified live by retrieving a 2022 email thread the standard interface couldn't touch.</p>
+      </li>
+      <li class="step">
+        <span class="node"></span>
+        <h3>Added an "open in Outlook" convenience <span class="tag prog">In progress</span></h3>
+        <p>Built a helper that opens a search result as the real message in desktop Outlook. It needs a one-time Microsoft code-signing certificate (a few-day identity-verification step) before firm-wide rollout.</p>
+      </li>
+      <li class="step">
+        <span class="node"></span>
+        <h3>Organized &amp; backed up the work <span class="tag done">Done</span></h3>
+        <p>Cleaned the project, confirmed no secrets were exposed, and published it to a private repository.</p>
+      </li>
+      <li class="step">
+        <span class="node"></span>
+        <h3>Fixed a "hangs and returns nothing" issue <span class="tag done">Done</span></h3>
+        <p>A reported freeze traced to Microsoft's archive export now taking ~50 seconds while our tool waited too long in one step. The tool now responds quickly and checks back in the background instead of hanging.</p>
+      </li>
+    </ol>
+
+    <p class="section-label">Where things stand</p>
+    <div class="cols">
+      <div>
+        <h4>Remaining before we call it 1.0</h4>
+        <ul class="list">
+          <li>Ship the just-made responsiveness fix.</li>
+          <li>Complete the Microsoft code-signing certificate so the Outlook convenience can roll out firm-wide.</li>
+          <li>Quiet the routine security alerts our own searches generate.</li>
+          <li>Final security review.</li>
+        </ul>
+      </div>
+      <div>
+        <h4>Setbacks — understood &amp; handled</h4>
+        <ul class="list muted">
+          <li>Workstation security tooling blocked some routine network and sign-in operations; every step was adapted around it.</li>
+          <li>A Microsoft product limitation forced the shift to eDiscovery — now a strength, since it also covers auto-expanding archives.</li>
+          <li>Sign-in sessions expired mid-work; all cloud actions now run as operator-run scripts with a safeguard against unattended access.</li>
+        </ul>
+      </div>
+    </div>
+
+    <footer>
+      Prepared by IT &amp; Security · Exchange Archive assistant-access initiative · Interim brief, subject to the final security review noted above.
+    </footer>
+  </article>
+</div>

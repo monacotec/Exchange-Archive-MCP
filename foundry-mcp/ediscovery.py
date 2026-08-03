@@ -1,7 +1,7 @@
 """
 foundry-mcp/ediscovery.py
 Purview eDiscovery data path for the Exchange Archive MCP.
-Version: 1.5.0
+Version: 1.6.0
 
 Why this exists: Microsoft Graph's Mail API cannot read In-Place Archives (see
 docs/online-archive-graph-findings.md), and the executive population includes
@@ -277,7 +277,10 @@ class EDiscoveryClient:
         """
         files = operation.get("exportFileMetadata") or []
         if not files:
-            raise RuntimeError("export operation finished but exposed no files")
+            raise RuntimeError(
+                f"export op {operation.get('id','?')} finished ({operation.get('status')}) "
+                "but exposed no exportFileMetadata")
+        dl_errors = []
         # Prefer an items CSV, then any CSV, then the smallest zip.
         def rank(f):
             name = str(f.get("fileName", "")).lower()
@@ -301,7 +304,12 @@ class EDiscoveryClient:
                          "X-AllowWithAADToken": "true"},
             ) as resp:
                 if resp.status >= 400:
-                    logger.warning("Download of %s failed: HTTP %s", name, resp.status)
+                    body = ""
+                    try: body = (await resp.text())[:200]
+                    except Exception: pass
+                    msg = f"download {name} HTTP {resp.status} {body}"
+                    logger.warning(msg)
+                    dl_errors.append(msg)
                     continue
                 blob = await resp.read()
             parsed = None
@@ -320,7 +328,12 @@ class EDiscoveryClient:
                 parsed = _parse_items_csv(blob.decode("utf-8-sig", "replace"))
             if parsed and parsed[0]:
                 return parsed  # (rows, columns)
-        raise RuntimeError("no parsable item report found in export files")
+        # Nothing parsed — say exactly why (which files, any download errors) so
+        # the generic client message never hides the real cause again.
+        names = ", ".join(str(f.get("fileName", "?")) for f in files)
+        detail = ("; download errors: " + " | ".join(dl_errors)) if dl_errors else ""
+        raise RuntimeError(
+            f"no per-item rows parsed from export files [{names}]{detail}")
 
 
 # Tolerant column resolution: report CSV headers vary across export versions.

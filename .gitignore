@@ -48,3 +48,6 @@ pdq-deploy/*.tar
 *.swp
 .DS_Store
 Thumbs.db
+
+# Azure inventory snapshots (identifiers/config; regenerate via Export-AzureInventory.ps1)
+inventory/

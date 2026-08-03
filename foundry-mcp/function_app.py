@@ -1,7 +1,7 @@
 """
 foundry-mcp/function_app.py
 Exchange Online Archive MCP Server — Azure Functions Python v2 model
-Version: 3.3.0
+Version: 3.4.0
 
 Rewritten 2026-07-13 on the Azure-Samples/remote-mcp-functions-python (GA extension)
 pattern, replacing the rev-1 draft. Key changes:
@@ -260,10 +260,15 @@ async def _ediscovery_estimate(session, caller: dict, kql: str) -> dict:
 def _ediscovery_response(tool: str, caller: dict, params: dict, kql: str, est: dict) -> str:
     _audit(tool, caller, {**params, "data_path": "ediscovery"}, est["status"], est["count"])
     note = ("Archive reached via Purview eDiscovery (Graph mail API cannot address "
-            "this archive). This is the match estimate; per-item metadata retrieval "
-            "arrives with archive_get_search_results in the next update.")
+            "this archive). This is the match COUNT only. To get the actual messages "
+            "(subject/sender/date/folder), call archive_get_search_results with this "
+            "search_id — it returns quickly and, if the report is still generating, "
+            "hands back an export_operation_id to poll with; keep calling until "
+            "status is 'complete' (usually under a minute total).")
     if est["status"] == "running":
-        note += " The estimate is still running - call archive_get_search_status with this search_id."
+        note = ("The estimate is still running - call archive_get_search_status with "
+                "this search_id until it reports 'succeeded', then call "
+                "archive_get_search_results.")
     return json.dumps({
         "data_path": "ediscovery",
         "kql": kql,
@@ -684,14 +689,14 @@ async def archive_get_search_status(context: MCPToolContext, search_id: str) -> 
 @app.mcp_tool_property(arg_name="export_operation_id", description="Operation id returned by a previous archive_get_search_results call whose report was still generating. Omit on the first call.", is_required=False)
 @app.mcp_tool_property(arg_name="top", description="Maximum items to return (1-100, default 20).", is_required=False)
 async def archive_get_search_results(context: MCPToolContext, search_id: str, export_operation_id: str = "", top: str = "20") -> str:
-    """Retrieve per-item metadata (subject, sender, date, archive folder) for a completed eDiscovery archive search. Generates a report-only export (no message content). If the report is still generating, returns an export_operation_id to pass on the next call."""
+    """Retrieve per-item metadata (subject, sender, date, archive folder) for a completed eDiscovery archive search. The eDiscovery report export is asynchronous (~up to a minute), so this tool returns FAST and is poll-based: if status is 'report_generating' it returns an export_operation_id — call this tool again with BOTH search_id and that export_operation_id every ~20 seconds until status is 'complete'. This is expected, not an error; do not give up after the first call."""
     caller = {}
     try:
         caller = _get_caller(context)
         _check_mailbox_allowed(caller["upn"])
         n = max(1, min(int(top or 20), 100))
         async with aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=90)
+            timeout=aiohttp.ClientTimeout(total=35)
         ) as session:
             token = await _app_graph_token()
             client = ediscovery.EDiscoveryClient(session, token, caller)
@@ -719,24 +724,34 @@ async def archive_get_search_results(context: MCPToolContext, search_id: str, ex
                              "(add sender, subject terms, or a tighter date range) and search again."),
                 })
 
-            # Start or resume the report export.
+            # Start or resume the report export. Poll only briefly in-call
+            # (eDiscovery report generation runs ~up to a minute) so the tool
+            # returns FAST and never blocks the MCP client — the caller polls by
+            # calling again with export_operation_id (see the tool description).
             op_id = export_operation_id or await client.start_export_report(search_id)
             waited = 0
+            poll_budget = 15
             while True:
                 op = await client.get_operation(op_id)
                 op_status = (op.get("status") or "notStarted").lower()
-                if op_status in ("succeeded", "partiallySucceeded".lower()):
+                if op_status in ("succeeded", "partiallysucceeded"):
                     break
                 if op_status == "failed":
-                    raise RuntimeError(f"export report operation {op_id} failed")
-                if waited >= 40:
+                    # Surface the operation's own error server-side (Phase 3
+                    # observability) so a real export failure names itself.
+                    logger.error("export report op %s failed: %s", op_id, json.dumps(op.get("error") or op.get("status")))
+                    raise RuntimeError(f"export report operation {op_id} failed server-side")
+                if waited >= poll_budget:
                     return json.dumps({
                         "data_path": "ediscovery",
                         "search_id": search_id,
                         "export_operation_id": op_id,
                         "status": "report_generating",
-                        "note": ("The item report is still generating - call archive_get_search_results "
-                                 "again with both search_id and export_operation_id in ~30 seconds."),
+                        "percent": op.get("percentProgress", 0),
+                        "note": ("Report still generating (this is normal). Call "
+                                 "archive_get_search_results AGAIN with search_id AND "
+                                 f"export_operation_id={op_id} in ~20 seconds. Repeat "
+                                 "until status is 'complete'."),
                     })
                 await asyncio.sleep(5)
                 waited += 5
