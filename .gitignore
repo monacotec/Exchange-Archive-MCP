@@ -29,6 +29,12 @@ obj/
 dist/
 *.user
 
+# Signing toolchain (redistributable binaries; re-stage via Get-SigningTools.ps1)
+signtool-cli/
+# Signing dlib payload (fetched from NuGet; the sign CLI path no longer needs it)
+desktop-handler/signing/*.dll
+desktop-handler/signing/*.runtimeconfig.json
+
 # ── PowerShell / Pester ──────────────────────────────────────────────────────
 .pester/
 tests/.pester/

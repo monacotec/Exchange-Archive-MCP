@@ -108,31 +108,46 @@ already requests this; verify it here.
 ```
 
 Creates the **PublicTrust** certificate profile (`gip-code-signing`) and grants
-**Trusted Signing Certificate Profile Signer** to the signing identity (default:
+**Artifact Signing Certificate Profile Signer** to the signing identity (default:
 the identity-verifier account). Portal fallback if the extension won't load:
 account → **Objects → Certificate profiles → Create → Public Trust**, pick the
 completed identity validation, name it `gip-code-signing`.
 
+> **Auth gotcha (seen 2026-08-04):** the script may print `[PASS] Signed in` from a
+> cached CLI session yet fail the profile create with **AADSTS70043** (conditional
+> access enforces a 4-hour sign-in frequency). v1.2.0 adds a live token probe that
+> force-relogins on a stale token, so just re-run `-Phase Profile` if it warns.
+
 ---
 
-## 5. Build-box prerequisites (one-time on whoever signs)
+## 5. Build-box prerequisites + signing (one-time on whoever signs)
 
-- Windows 10 1809+/11, **.NET 8 SDK** (build) + runtime.
-- **Windows SDK** (for `signtool.exe`).
-- The **Trusted/Artifact Signing dlib** (`Azure.CodeSigning.Dlib`) + a
-  `metadata.json` holding the region **endpoint** (`https://eus.codesigning.azure.net`
-  for East US), the **CodeSigningAccountName** (`gipartifactsign`), and the
-  **CertificateProfileName** (`gip-code-signing`).
+- Windows 10 1809+/11, **.NET 8+ SDK** (build).
+- Microsoft's **`sign` CLI**, staged into the repo once:
+  ```powershell
+  & 'C:\Users\jmonaco\Documents\AI Workfolder\Projects\Archive-Mailbox-MCP\foundry-mcp\desktop-handler\Get-SigningTools.ps1'
+  ```
+  (Installs the `sign` dotnet tool and copies its payload into `.\signtool-cli\`.
+  We run it from the repo path because EDR/ThreatLocker denies loading the tool
+  from `~/.dotnet/tools/.store`. The payload is gitignored.)
+- A live **`az login`** as a **signer-role holder** (super-jmonaco@gipartners.com).
+- Windows SDK **`signtool.exe`** is optional — used only to *verify* the result.
 
-Then sign:
+Then build + sign:
 
 ```powershell
-& 'C:\Users\jmonaco\Documents\AI Workfolder\Projects\Archive-Mailbox-MCP\foundry-mcp\desktop-handler\build.ps1' `
-    -DlibPath <path\Azure.CodeSigning.Dlib.dll> -MetadataPath <path\metadata.json>
+& 'C:\Users\jmonaco\Documents\AI Workfolder\Projects\Archive-Mailbox-MCP\foundry-mcp\desktop-handler\build.ps1' -Sign
 ```
 
-`build.ps1` publishes the self-contained exe and signs it with `signtool … /dlib
-… /dmdf …`, then verifies the signature chains to a trusted root.
+`build.ps1 -Sign` publishes the self-contained exe, then signs it with
+`sign code artifact-signing … -act azure-cli` (account `gipartifactsign`, profile
+`gip-code-signing`, endpoint `https://eus.codesigning.azure.net/`) and verifies the
+result chains to the publicly-trusted Microsoft ID Verification root.
+
+> **Why not `signtool /dlib`:** the earlier signtool `/dlib`/`/dmdf` path fell back
+> to a *local self-signed* cert and failed with `SignerSign() 0x80070032`. The `sign`
+> CLI has Artifact Signing built in and authenticates cleanly via the `az` session —
+> confirmed 2026-08-04 producing a valid `O=GI Partners Acquisitions LLC` signature.
 
 ---
 
@@ -158,6 +173,6 @@ account-creation blade. Signing a handful of exe/script revisions is negligible.
 | Eligibility pre-check | | | |
 | Account provisioned (Phase Account) | | | |
 | Identity validation submitted | | | (1–20 business days) |
-| Identity validation **Completed** | | | Identity Validation Id: `________` |
-| Certificate profile created (Phase Profile) | | | |
-| Build box prepped + test sign verified | | | |
+| Identity validation **Completed** | super-jmonaco | 2026-08-04 | Identity Validation Id: `d8b4c395-cc1f-4d48-af13-0ea200cb1a83` |
+| Certificate profile created (Phase Profile) | super-jmonaco | 2026-08-04 | `gip-code-signing` (PublicTrust) + Signer role granted to super-jmonaco |
+| Build box prepped + test sign verified | super-jmonaco | 2026-08-04 | Valid sig, `O=GI Partners Acquisitions LLC`, chains to MS ID Verification root; deployed to `C:\GI\ArchiveOpen.exe` |

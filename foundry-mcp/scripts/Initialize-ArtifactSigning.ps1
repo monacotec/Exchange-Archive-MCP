@@ -1,4 +1,4 @@
-# Version: 1.1.0
+# Version: 1.2.0
 # Initialize-ArtifactSigning.ps1 — provisions the scriptable parts of Azure
 # Artifact Signing (formerly Trusted Signing) for code-signing ArchiveOpen.exe
 # and, as a bonus, this repo's PowerShell scripts.
@@ -28,6 +28,7 @@ param(
     [string]$Phase = 'Account',
 
     [string]$SubscriptionId = 'db17a4a4-f677-498a-b4a2-eb401ba9cf29',
+    [string]$TenantId       = '9c1b0b26-717a-4eda-9d7e-7eebc00066bf',
     [string]$ResourceGroup  = 'finresgroup',
     [string]$Location       = 'eastus',                 # Artifact Signing-supported region
     [string]$AccountName    = 'gipartifactsign',         # 3-24 alnum, globally unique, start letter, no 'one' prefix
@@ -65,9 +66,26 @@ $logFile = Join-Path $logDir ('artifact-signing-{0:yyyyMMdd-HHmmss}.log' -f (Get
 function LogMut ($m) { ('{0:o}  {1}' -f (Get-Date), $m) | Add-Content $logFile }
 
 $acct = az account show -o json 2>$null | ConvertFrom-Json
-if (-not $acct) { az login --output none; $acct = az account show -o json | ConvertFrom-Json }
+if (-not $acct) { az login --tenant $TenantId --output none; $acct = az account show -o json | ConvertFrom-Json }
 if ($acct.id -ne $SubscriptionId) { az account set --subscription $SubscriptionId }
-Ok "Signed in as $($acct.user.name) on $SubscriptionId."
+
+# Live token probe. NEVER trust a cached CLI session: conditional access enforces a
+# 4-hour sign-in frequency, so `az account show` can succeed from local cache while
+# every real ARM call fails with AADSTS70043 ("refresh token has expired ... sign-in
+# frequency checks"). Prove the token is live before mutating; force a clean re-login
+# if it is stale, then retry once.
+az account get-access-token --resource 'https://management.azure.com/' --output none 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Warn 'Cached token is stale (conditional-access 4h sign-in frequency). Re-authenticating interactively...'
+    az logout 2>$null | Out-Null
+    az login --tenant $TenantId --output none
+    if ($LASTEXITCODE -ne 0) { throw "Interactive re-login failed. Run: az login --tenant $TenantId  then re-run this script." }
+    az account set --subscription $SubscriptionId
+    az account get-access-token --resource 'https://management.azure.com/' --output none 2>$null
+    if ($LASTEXITCODE -ne 0) { throw 'Token still not live after re-login; resolve sign-in, then re-run.' }
+    $acct = az account show -o json | ConvertFrom-Json
+}
+Ok "Signed in as $($acct.user.name) on $SubscriptionId (live token verified)."
 
 $acctResourceId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.CodeSigning/codeSigningAccounts/$AccountName"
 

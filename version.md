@@ -35,7 +35,8 @@ Release: bump the file's internal version header → update its row here → tag
 | `ediscovery.py` | 1.7.0 | ensure_export() dedupe cache (prewarm ↔ results converge on one export); specific download errors; giparchive_url(); one-case-per-caller |
 | `desktop-handler/ArchiveOpen.csproj` | 1.0.0 | .NET 8 self-contained WinExe project for the giparchive: handler |
 | `desktop-handler/Program.cs` | 1.0.0 | Message-ID validation, Outlook COM AdvancedSearch (proptag 0x1035001F), Display, OWA fallback, logging |
-| `desktop-handler/build.ps1` | 1.0.0 | dotnet publish single-file + optional Artifact Signing signtool sign/verify |
+| `desktop-handler/build.ps1` | 1.1.0 | dotnet publish single-file + optional Artifact Signing via the `sign` CLI (artifact-signing, azure-cli cred) + verify |
+| `desktop-handler/Get-SigningTools.ps1` | 1.0.0 | Stages Microsoft's `sign` CLI into ./signtool-cli/ (repo path; EDR blocks the global tool store) |
 | `desktop-handler/register-dev.ps1` | 1.0.0 | HKCU giparchive: registration for local dev testing |
 | `host.json` | 2.1.0 | webhookAuthorizationLevel=Anonymous — atomic Easy Auth cutover |
 | `requirements.txt` | 2.1.0 | azure-functions stable pin |
@@ -64,7 +65,7 @@ Release: bump the file's internal version header → update its row here → tag
 | `scripts/Test-EDiscoveryExport.ps1` | 1.2.0 | Full export-leg repro + unzip/parse/column-map (BUGFIX Phase 1 + regression) |
 | `scripts/Test-OutlookArchiveOpen.ps1` | 1.2.0 | D0 spike (PASSED): Outlook COM open by proptag 0x1035001F |
 | `scripts/Get-ArchiveConfig.ps1` | 1.0.0 | PS 5.1 EXO archive config read (AutoExpandingArchiveEnabled) |
-| `scripts/Initialize-ArtifactSigning.ps1` | 1.0.0 | Provisions Artifact Signing (account, roles, cert profile) |
+| `scripts/Initialize-ArtifactSigning.ps1` | 1.2.0 | Provisions Artifact Signing (account, roles, cert profile); post-rename role names + live token probe |
 | `scripts/Export-AzureInventory.ps1` | 1.0.0 | Read-only Azure/Entra config snapshot → foundry-mcp/inventory/ |
 | `README.md` | rev 2 | Pre-hardening draft; rewritten in FOUNDRY-MCP-PLAN Phase 5 |
 
