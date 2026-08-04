@@ -17,7 +17,7 @@
     <Nullable>disable</Nullable>
     <AssemblyName>ArchiveOpen</AssemblyName>
     <RootNamespace>Gip.ArchiveOpen</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Company>GI Partners</Company>
     <Product>GIP Archive Open</Product>
     <Description>Opens an Exchange Online Archive message in classic Outlook by Message-ID.</Description>

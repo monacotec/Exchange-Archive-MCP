@@ -127,7 +127,11 @@ namespace Gip.ArchiveOpen
                 ol = Activator.CreateInstance(olType);   // attaches to running instance
                 dynamic ns = ol.GetNamespace("MAPI");
 
-                // Collect every mounted Online Archive store root as the search scope.
+                // Collect each mounted Online Archive store root as its OWN scope.
+                // AdvancedSearch CANNOT span multiple stores in one call — a
+                // comma-joined cross-store scope silently returns 0 (seen 2026-08-04
+                // once a 2nd archive, helpdesk@, was mounted). So search each store
+                // separately and stop at the first hit.
                 var scopes = new System.Collections.Generic.List<string>();
                 dynamic stores = ns.Stores;
                 int storeCount = stores.Count;
@@ -153,34 +157,43 @@ namespace Gip.ArchiveOpen
                     return false;
                 }
 
-                string scope = string.Join(",", scopes);
                 string midEscaped = messageId.Replace("'", "''");   // DASL injection guard
                 string filter = "\"" + ProptagInternetMessageId + "\" = '" + midEscaped + "'";
-                Log("Scope: " + scope);
+                Log("Scopes (" + scopes.Count + ", searched separately): " + string.Join(" | ", scopes));
 
-                dynamic search = ol.AdvancedSearch(scope, filter, true, "giparchive");
+                // Share an overall budget across stores; give each store a fair slice.
+                DateTime globalDeadline = DateTime.UtcNow.AddSeconds(SearchTimeoutSeconds);
+                int perStoreSeconds = Math.Max(15, SearchTimeoutSeconds / scopes.Count);
 
-                // Poll Results with a pumped message loop (completion event is
-                // unreliable in a headless STA host — D0 finding).
-                DateTime deadline = DateTime.UtcNow.AddSeconds(SearchTimeoutSeconds);
-                int count = 0;
-                while (DateTime.UtcNow < deadline)
+                foreach (string scope in scopes)
                 {
-                    Application.DoEvents();
-                    System.Threading.Thread.Sleep(600);
-                    try { count = search.Results.Count; } catch { count = 0; }
-                    if (count > 0) break;
+                    dynamic search = ol.AdvancedSearch(scope, filter, true, "giparchive");
+
+                    // Poll Results with a pumped message loop (completion event is
+                    // unreliable in a headless STA host — D0 finding).
+                    DateTime storeDeadline = DateTime.UtcNow.AddSeconds(perStoreSeconds);
+                    int count = 0;
+                    while (DateTime.UtcNow < storeDeadline && DateTime.UtcNow < globalDeadline)
+                    {
+                        Application.DoEvents();
+                        System.Threading.Thread.Sleep(600);
+                        try { count = search.Results.Count; } catch { count = 0; }
+                        if (count > 0) break;
+                    }
+
+                    if (count > 0)
+                    {
+                        dynamic item = search.Results.Item(1);
+                        item.Display();   // opens the message window in Outlook
+                        Log("Opened from scope " + scope);
+                        return true;
+                    }
+                    Log("0 matches in scope " + scope);
+                    if (DateTime.UtcNow >= globalDeadline) break;
                 }
 
-                if (count < 1)
-                {
-                    Log("AdvancedSearch returned 0 within timeout.");
-                    return false;
-                }
-
-                dynamic item = search.Results.Item(1);
-                item.Display();   // opens the message window in Outlook
-                return true;
+                Log("AdvancedSearch returned 0 across all archive scopes within timeout.");
+                return false;
             }
             catch (Exception ex)
             {

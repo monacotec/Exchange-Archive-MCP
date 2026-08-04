@@ -33,8 +33,8 @@ Release: bump the file's internal version header → update its row here → tag
 |------|---------|-------------|
 | `function_app.py` | 3.6.0 | Honest jump-link guidance: open_desktop_url (giparchive) is the reliable archive path; open_url (OWA) best-effort only (immutable-vs-EWS id + archive scope → "moved or deleted"); internet_message_id as no-install search fallback. (3.5.0: prewarm export on estimate-success) |
 | `ediscovery.py` | 1.7.0 | ensure_export() dedupe cache (prewarm ↔ results converge on one export); specific download errors; giparchive_url(); one-case-per-caller |
-| `desktop-handler/ArchiveOpen.csproj` | 1.0.0 | .NET 8 self-contained WinExe project for the giparchive: handler |
-| `desktop-handler/Program.cs` | 1.0.0 | Message-ID validation, Outlook COM AdvancedSearch (proptag 0x1035001F), Display, OWA fallback, logging |
+| `desktop-handler/ArchiveOpen.csproj` | 1.1.0 | .NET 8 self-contained WinExe project for the giparchive: handler |
+| `desktop-handler/Program.cs` | 1.1.0 | Message-ID validation, Outlook COM AdvancedSearch (proptag 0x1035001F) PER-STORE, Display, OWA fallback, logging |
 | `desktop-handler/build.ps1` | 1.1.0 | dotnet publish single-file + optional Artifact Signing via the `sign` CLI (artifact-signing, azure-cli cred) + verify |
 | `desktop-handler/Get-SigningTools.ps1` | 1.0.0 | Stages Microsoft's `sign` CLI into ./signtool-cli/ (repo path; EDR blocks the global tool store) |
 | `desktop-handler/register-dev.ps1` | 1.0.0 | HKCU giparchive: registration for local dev testing |
