@@ -1,6 +1,8 @@
 #Requires -Version 7.0
 #Requires -Modules Microsoft.Graph.Authentication
-# Version: 1.1.1
+# Version: 1.1.2
+# 1.1.2: section 4e called Resolve-UserId, a helper that only exists in
+#        Tighten-AppRegistration.ps1 — approver lookup now inlined.
 # 1.1.1: retry the catalog resourceRequests adminAdd on
 #        ResourceNotFoundInOriginSystem — entitlement management runs on a
 #        separate backend that lags directory replication, so a group created
@@ -250,7 +252,10 @@ try {
         }
 
         # 4e. Request policy: any tenant member may request; approver = jmonaco
-        $approverId = Resolve-UserId 'jmonaco@gipartners.com'
+        $approverUpn = 'jmonaco@gipartners.com'
+        $approver = (Invoke-MgGraphRequest -Method GET -Uri ("https://graph.microsoft.com/v1.0/users?`$filter=" + [Uri]::EscapeDataString("userPrincipalName eq '$approverUpn'") + '&$select=id') -OutputType PSObject).value | Select-Object -First 1
+        if (-not $approver) { throw "approver $approverUpn not found in the tenant." }
+        $approverId = $approver.id
         $policyName = 'Request with approval'
         $policies = @((Invoke-MgGraphRequest -Method GET -Uri "$emBase/assignmentPolicies?`$filter=$([Uri]::EscapeDataString("accessPackage/id eq '$($package.id)'"))" -OutputType PSObject).value)
         if (@($policies | Where-Object { $_.displayName -eq $policyName }).Count -gt 0) {
