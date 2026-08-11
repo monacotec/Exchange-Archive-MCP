@@ -1,6 +1,10 @@
 #Requires -Version 7.0
 #Requires -Modules Microsoft.Graph.Authentication
-# Version: 1.1.0
+# Version: 1.1.1
+# 1.1.1: retry the catalog resourceRequests adminAdd on
+#        ResourceNotFoundInOriginSystem — entitlement management runs on a
+#        separate backend that lags directory replication, so a group created
+#        seconds earlier 400s until it propagates (observed live 2026-08-11).
 # 1.1.0: the enterprise-app "Self-service" blade does NOT exist for custom OIDC
 #        app registrations (gallery/SSO apps only) — replaced the portal step
 #        with a fully scripted Identity Governance ACCESS PACKAGE: catalog +
@@ -185,11 +189,28 @@ try {
         if ($resource) { Ok "group is a catalog resource" }
         elseif ($PSCmdlet.ShouldProcess('entitlement management', "add group $GroupName to catalog")) {
             Write-MutationLog "POST resourceRequests adminAdd group $GroupName -> catalog '$catalogName'"
-            Invoke-MgGraphRequest -Method POST -Uri "$emBase/resourceRequests" -Body (@{
-                requestType = 'adminAdd'
-                resource    = @{ originId = $group.id; originSystem = 'AadGroup' }
-                catalog     = @{ id = $catalog.id }
-            } | ConvertTo-Json -Depth 5) -ContentType 'application/json' | Out-Null
+            # The entitlement-management backend lags directory replication: a
+            # just-created group 400s with ResourceNotFoundInOriginSystem until
+            # it propagates. Retry with backoff before treating it as fatal.
+            $added = $false
+            foreach ($attempt in 1..6) {
+                try {
+                    Invoke-MgGraphRequest -Method POST -Uri "$emBase/resourceRequests" -Body (@{
+                        requestType = 'adminAdd'
+                        resource    = @{ originId = $group.id; originSystem = 'AadGroup' }
+                        catalog     = @{ id = $catalog.id }
+                    } | ConvertTo-Json -Depth 5) -ContentType 'application/json' | Out-Null
+                    $added = $true
+                    break
+                } catch {
+                    $isReplicationLag = ($_.ErrorDetails -and $_.ErrorDetails.Message -match 'ResourceNotFoundInOriginSystem') -or
+                                        ($_.Exception.Message -match 'ResourceNotFoundInOriginSystem')
+                    if (-not $isReplicationLag -or $attempt -eq 6) { throw }
+                    Info "group not yet visible to entitlement management (replication lag) - retry $attempt/5 in 20s..."
+                    Start-Sleep -Seconds 20
+                }
+            }
+            if (-not $added) { throw 'group never became visible to entitlement management.' }
             foreach ($try in 1..10) {
                 Start-Sleep -Seconds 3
                 $resource = (Invoke-MgGraphRequest -Method GET -Uri "$emBase/catalogs/$($catalog.id)/resources?`$filter=$resFilter" -OutputType PSObject).value | Select-Object -First 1
