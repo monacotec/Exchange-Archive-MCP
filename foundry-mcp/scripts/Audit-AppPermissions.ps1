@@ -1,6 +1,8 @@
 #Requires -Version 7.0
 #Requires -Modules Microsoft.Graph.Authentication
-# Version: 1.1.1
+# Version: 1.2.0
+# 1.2.0: full run output captured to a timestamped log under foundry-mcp\logs\
+#        (transcript), path printed at end of run.
 # 1.1.1: @(...)[0] lookups replaced with Select-Object -First 1 — StrictMode
 #        throws on indexing an empty result (bit Enable-McpAccessRequests live).
 # 1.1.0: email/profile/openid reclassified as expected — they are OIDC sign-in
@@ -41,6 +43,13 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# Capture the whole run to a log file in the project (foundry-mcp\logs\).
+$script:LogDir = Join-Path $PSScriptRoot '..\logs'
+if (-not (Test-Path $script:LogDir)) { New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null }
+$script:LogPath = Join-Path (Resolve-Path $script:LogDir).Path ("appreg-audit-{0}.log" -f (Get-Date).ToString('yyyyMMdd-HHmmss'))
+Start-Transcript -Path $script:LogPath | Out-Null
+Write-Host "Logging this run to: $script:LogPath" -ForegroundColor DarkGray
 
 $graphResourceAppId   = '00000003-0000-0000-c000-000000000000'  # Microsoft Graph
 $purviewResourceAppId = 'b26e684c-5068-4120-a679-64a5d2c909d9'  # MicrosoftPurviewEDiscovery
@@ -196,4 +205,6 @@ try {
 }
 finally {
     Disconnect-MgGraph | Out-Null
+    Write-Host "`nLog saved to: $script:LogPath" -ForegroundColor Cyan
+    Stop-Transcript | Out-Null
 }
