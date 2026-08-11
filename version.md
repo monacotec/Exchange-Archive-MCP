@@ -49,13 +49,18 @@ Release: bump the file's internal version header → update its row here → tag
 | `Register-MCPInApiCenter.ps1` | 1.0.0 | Idempotent API Center registration |
 | `scripts/Register-EntraApp.ps1` | 2.0.0 | rev-2 shared-app-reg / delegated-OBO (app 9519ca68; api://exchange-mcp Archive.Read) |
 | `scripts/Set-ApplicationAccessPolicy.ps1` | 1.1.0 | Mailbox scope restriction; try/finally disconnect |
-| `scripts/Rotate-MCPClientSecret.ps1` | 1.1.0 | Secret rotation; `-RevokeOld` |
+| `scripts/Rotate-MCPClientSecret.ps1` | 1.2.0 | Secret rotation; `-RevokeOld` with KV-hint keeper match (same-day expiries made "newest" a coin flip); prod defaults baked in |
 | `scripts/Add-FederatedCredential.ps1` | 1.0.0 | Links UAI to app reg (WIF); secret-free OBO |
 | `scripts/Verify-Deployment.ps1` | 1.0.0 | Post-deploy exit checks (indexing, key, gate, PRM) |
 | `scripts/Complete-KvCutover.ps1` | 1.0.0 | Verifies kv-exmcp-gi migration, soft-deletes old vault |
 | `scripts/Remove-FoundrySpike.ps1` | 1.0.0 | Deletes spike Foundry account + project |
 | `scripts/Set-ClaudeConnectorAuth.ps1` | 1.2.0 | Connector URL identifier-URI + web→public-client; `-GrantAdminConsent`; sign-in diagnostics |
 | `scripts/Get-McpErrorTrace.ps1` | 1.0.3 | App Insights exception behind a correlation_id via az rest |
+| `scripts/Get-McpUserActivity.ps1` | 1.3.0 | Per-user tool-call/error lookup: allowlist check, app state, telemetry sanity, v3.6.1 message-embedded audit JSON |
+| `scripts/Get-McpSigninTrace.ps1` | 1.1.0 | Deploy/config history + raw request dump + Entra sign-in log per app (pre-tool-layer failures) |
+| `scripts/Get-McpBundleHistory.ps1` | 1.1.0 | Live bundle version via /admin/host/status (az-tunneled) + trace history; caught the 4.44.0→4.46.0 drift |
+| `scripts/Audit-AppPermissions.ps1` | 1.1.0 | Read-only least-privilege audit vs code-verified baseline + posture checks (owners, assignment, secrets, redirects) |
+| `scripts/Tighten-AppRegistration.ps1` | 1.0.0 | Applies the audit's tightening items: drop eDiscovery.Read.All, owners, assignment-required + user assignments, legacy redirect removal; idempotent, mutation-logged |
 | `scripts/Initialize-EDiscoveryAccess.ps1` | 1.0.0 | E0 prereqs: Graph app roles, Purview SP + eDiscovery Manager, standing case (PS 5.1) |
 | `scripts/Invoke-EDiscoverySpike.ps1` | 1.1.0 | E0 spike (PASSED): noncustodialSources bind mechanism |
 | `scripts/Test-EDiscoveryAppAccess.ps1` | 1.1.0 | app-only token roles + API replay; proved case-ownership gate |
