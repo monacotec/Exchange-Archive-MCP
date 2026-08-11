@@ -298,7 +298,7 @@ try {
     }
 
     Write-Host ''
-    if ($issues.Count -eq 0) { Write-Host 'ALL STEPS APPLIED / VERIFIED (one portal step above remains manual).' -ForegroundColor Green }
+    if ($issues.Count -eq 0) { Write-Host 'ALL STEPS APPLIED / VERIFIED.' -ForegroundColor Green }
     else {
         Write-Host "PROBLEMS ($($issues.Count)):" -ForegroundColor Red
         for ($i = 0; $i -lt $issues.Count; $i++) { Write-Host ("  {0}. {1}" -f ($i + 1), $issues[$i]) -ForegroundColor Red }
