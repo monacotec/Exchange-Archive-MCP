@@ -31,14 +31,14 @@ Release: bump the file's internal version header → update its row here → tag
 
 | File | Version | Description |
 |------|---------|-------------|
-| `function_app.py` | 3.6.0 | Honest jump-link guidance: open_desktop_url (giparchive) is the reliable archive path; open_url (OWA) best-effort only (immutable-vs-EWS id + archive scope → "moved or deleted"); internet_message_id as no-install search fallback. (3.5.0: prewarm export on estimate-success) |
+| `function_app.py` | 3.6.1 | Audit fix: payload embedded in trace message as JSON (custom_dimensions extra= was dropped by built-in Functions telemetry — caller identity never reached Log Analytics; found 2026-08-11 during xtsai error triage). (3.6.0: honest jump-link guidance; 3.5.0: prewarm export on estimate-success) |
 | `ediscovery.py` | 1.7.0 | ensure_export() dedupe cache (prewarm ↔ results converge on one export); specific download errors; giparchive_url(); one-case-per-caller |
 | `desktop-handler/ArchiveOpen.csproj` | 1.1.0 | .NET 8 self-contained WinExe project for the giparchive: handler |
 | `desktop-handler/Program.cs` | 1.1.0 | Message-ID validation, Outlook COM AdvancedSearch (proptag 0x1035001F) PER-STORE, Display, OWA fallback, logging |
 | `desktop-handler/build.ps1` | 1.1.0 | dotnet publish single-file + optional Artifact Signing via the `sign` CLI (artifact-signing, azure-cli cred) + verify |
 | `desktop-handler/Get-SigningTools.ps1` | 1.0.0 | Stages Microsoft's `sign` CLI into ./signtool-cli/ (repo path; EDR blocks the global tool store) |
 | `desktop-handler/register-dev.ps1` | 1.0.0 | HKCU giparchive: registration for local dev testing |
-| `host.json` | 2.1.0 | webhookAuthorizationLevel=Anonymous — atomic Easy Auth cutover |
+| `host.json` | 2.2.0 | Extension bundle PINNED to exact [4.44.0] — the floating [4.*, 5.0.0) range silently adopted preview 4.46.0 on a host recycle (~post 2026-08-04), breaking tools/list for new MCP sessions ("no tools available"). Never float a preview bundle in prod. (2.1.0: webhookAuthorizationLevel=Anonymous — atomic Easy Auth cutover) |
 | `requirements.txt` | 2.1.0 | azure-functions stable pin |
 | `azure.yaml` | 1.0.0 | azd service definition |
 | `infra/main.bicep` | 3.2.0 | Wires Log Analytics workspace ID into keyvault module (finding 14) |

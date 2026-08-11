@@ -1,7 +1,7 @@
 """
 foundry-mcp/function_app.py
 Exchange Online Archive MCP Server — Azure Functions Python v2 model
-Version: 3.6.0
+Version: 3.6.1
 
 Rewritten 2026-07-13 on the Azure-Samples/remote-mcp-functions-python (GA extension)
 pattern, replacing the rev-1 draft. Key changes:
@@ -23,6 +23,10 @@ Tools (all read-only, all scoped to the signed-in user):
   - get_mail_by_date_range   : per-folder receivedDateTime $filter fan-out
   - list_archive_folders     : Online Archive folder hierarchy
 
+v3.6.1 (2026-08-11): audit records now embed their payload in the trace message
+(JSON after the 'mcp_tool_call ' prefix). The previous custom_dimensions extra=
+was dropped by the built-in Functions telemetry (needs OpenCensus), leaving
+audit rows with no caller identity — per-user forensics were impossible.
 v3.0.0 (2026-07-22): TWO-LAYER DATA PATH (plans/ARCHIVE-DATA-PATH-PLAN.md).
 Graph's Mail API cannot read In-Place Archives (unshipped EWS-parity gap —
 docs/online-archive-graph-findings.md), so when the v2.3 archive resolver
@@ -454,21 +458,31 @@ def _summarise(msg: dict, folder: str = None) -> dict:
 
 
 def _audit(tool: str, caller: dict, params: dict, result: str, count: int = 0) -> None:
-    """Per-call audit record → App Insights (primary audit sink per rev-2 plan)."""
-    logger.info(
-        "mcp_tool_call",
-        extra={
-            "custom_dimensions": {
-                "tool_name": tool,
-                "user_identity": caller.get("upn", "unknown"),
-                "user_oid": caller.get("oid", ""),
-                "input_summary": json.dumps(params),
-                "output_summary": result,
-                "result_count": count,
-                "ts": datetime.utcnow().isoformat() + "Z",
-            }
-        },
-    )
+    """Per-call audit record → App Insights (primary audit sink per rev-2 plan).
+
+    The payload is serialized INTO the message text: the extra={"custom_dimensions"}
+    pattern only works under an OpenCensus AzureLogHandler, and the built-in
+    Functions App Insights integration silently drops it (verified 2026-08-11 —
+    AppTraces rows for mcp_tool_call carried host properties only, so per-user
+    audit queries returned nothing). Message-embedded JSON survives every
+    ingestion path. Read it back in KQL with:
+
+        AppTraces
+        | where Message startswith 'mcp_tool_call '
+        | extend d = parse_json(substring(Message, 14))
+        | project TimeGenerated, tostring(d.tool_name), tostring(d.user_identity),
+                  tostring(d.output_summary), toint(d.result_count)
+    """
+    record = {
+        "tool_name": tool,
+        "user_identity": caller.get("upn", "unknown"),
+        "user_oid": caller.get("oid", ""),
+        "input_summary": json.dumps(params),
+        "output_summary": result,
+        "result_count": count,
+        "ts": datetime.utcnow().isoformat() + "Z",
+    }
+    logger.info("mcp_tool_call %s", json.dumps(record))
 
 
 def _error(tool: str, caller: dict, ex: Exception) -> str:
