@@ -1,4 +1,8 @@
-# Version: 0.3.0
+# Version: 0.4.0
+# 0.4.0: -Scope archive|primary|both -- fan the same per-folder $search across
+#        the primary mailbox tree (msgfolderroot) as well as the Online
+#        Archive; every result now carries a 'store' field next to 'folder'.
+#        Default stays 'archive' (tool contract unchanged unless asked).
 # 0.3.0: Online Archive fix -- a single $search against the archive root only
 #        sees root-level items (~none at Top of Information Store). Enumerate
 #        every folder under archivemsgfolderroot (Get-ArchiveFolderList) and fan
@@ -32,14 +36,25 @@ function Invoke-SearchArchive {
     param(
         [Parameter(Mandatory)]$Ctx,
         [Parameter(Mandatory)][string]$Query,
-        [int]$MaxResults = 50
+        [int]$MaxResults = 50,
+        [ValidateSet('archive', 'primary', 'both')][string]$Scope = 'archive'
     )
     $kql     = ConvertTo-KqlQuery -Query $Query
     $encoded = ConvertTo-GraphSearchValue -Kql $kql
     $selectClause = '$select=id,subject,from,toRecipients,receivedDateTime,hasAttachments,parentFolderId,bodyPreview'
     $perFolderTop = [Math]::Min($MaxResults, 100)
 
-    $folders = @(Get-ArchiveFolderList)
+    $folders = @()
+    if ($Scope -in @('archive', 'both')) {
+        $folders += @(Get-ArchiveFolderList | ForEach-Object {
+            [PSCustomObject]@{ Id = $_.Id; DisplayName = $_.DisplayName; Store = 'archive' }
+        })
+    }
+    if ($Scope -in @('primary', 'both')) {
+        $folders += @(Get-PrimaryFolderList | ForEach-Object {
+            [PSCustomObject]@{ Id = $_.Id; DisplayName = $_.DisplayName; Store = 'primary' }
+        })
+    }
     $merged  = [System.Collections.Generic.List[object]]::new()
     $seen    = [System.Collections.Generic.HashSet[string]]::new()
     $skipped = [System.Collections.Generic.List[string]]::new()
@@ -51,7 +66,7 @@ function Invoke-SearchArchive {
         } catch {
             # Some special folders reject $search; one bad folder must not sink
             # the whole call.
-            [void]$skipped.Add($folder.DisplayName)
+            [void]$skipped.Add("$($folder.Store)/$($folder.DisplayName)")
             continue
         }
         foreach ($m in $paged.Items) {
@@ -69,6 +84,7 @@ function Invoke-SearchArchive {
                 received        = $m.receivedDateTime
                 hasAttachments  = $m.hasAttachments
                 parentFolderId  = $m.parentFolderId
+                store           = $folder.Store
                 folder          = $folder.DisplayName
                 preview         = $m.bodyPreview
             })
@@ -80,6 +96,7 @@ function Invoke-SearchArchive {
     return [PSCustomObject]@{
         query            = $Query
         kql              = $kql
+        scope            = $Scope
         count            = $results.Count
         truncated        = ($sorted.Count -gt $MaxResults)
         folders_searched = $folders.Count

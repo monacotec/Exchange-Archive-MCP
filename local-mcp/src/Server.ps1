@@ -1,4 +1,4 @@
-# Version: 0.3.2
+# Version: 0.3.3
 # Exchange Archive MCP — stdio entry point.
 # Auth: Microsoft.Graph.Authentication (Connect-MgGraph). See CHANGES.md §1.
 
@@ -91,12 +91,13 @@ $ToolDefs = @(
     },
     @{
         name = 'archive_search'
-        description = 'Search every folder of the In-Place (Online) Archive with a KQL-like query (supports from:, to:, subject:, after:YYYY-MM-DD, before:YYYY-MM-DD, has:attachment). Per-folder fan-out, merged newest-first; each result names its archive folder. Returns up to max_results message summaries.'
+        description = 'Search mail with a KQL-like query (supports from:, to:, subject:, after:YYYY-MM-DD, before:YYYY-MM-DD, has:attachment). scope selects the store: archive (In-Place/Online Archive, default), primary (regular mailbox), or both. Per-folder fan-out, merged newest-first; each result names its store and folder. Returns up to max_results message summaries.'
         inputSchema = [ordered]@{ type='object'; properties = [ordered]@{
             query       = [ordered]@{ type='string'; minLength=1 }
             max_results = [ordered]@{ type='integer'; minimum=1; maximum=1000; default=50 }
+            scope       = [ordered]@{ type='string'; enum=@('archive','primary','both'); default='archive'; description='Which mail store(s) to search.' }
         }; required=@('query'); additionalProperties = $false }
-        invoke = { param($a,$ctx) Invoke-SearchArchive -Ctx $ctx -Query $a.query -MaxResults ([int]($a.max_results ?? 50)) }
+        invoke = { param($a,$ctx) Invoke-SearchArchive -Ctx $ctx -Query $a.query -MaxResults ([int]($a.max_results ?? 50)) -Scope ([string]($a.scope ?? 'archive')) }
     },
     @{
         name = 'archive_get_message'
@@ -191,7 +192,7 @@ function Invoke-Method {
             return @{
                 protocolVersion = '2025-06-18'
                 capabilities    = @{ tools = @{} }
-                serverInfo      = @{ name = 'exchange-archive-local'; version = '0.3.1' }
+                serverInfo      = @{ name = 'exchange-archive-local'; version = '0.3.2' }
             }
         }
         'ping' { return @{} }
@@ -257,7 +258,7 @@ function Invoke-Method {
     }
 }
 
-Write-StderrLog "exchange-archive-local 0.3.1 starting (pid=$PID)"
+Write-StderrLog "exchange-archive-local 0.3.2 starting (pid=$PID)"
 
 while ($true) {
     $msg = Read-StdioMessage

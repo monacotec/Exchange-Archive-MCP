@@ -1,6 +1,6 @@
 @{
     RootModule        = ''
-    ModuleVersion     = '0.3.1'
+    ModuleVersion     = '0.3.2'
     GUID              = 'a7d2f1b4-9e6c-4a3f-bd21-7f0e9c4c5a01'
     Author            = 'Jeff Monaco'
     CompanyName       = 'GI Partners'

@@ -214,8 +214,14 @@ Describe 'Invoke-SearchArchive - per-folder $search fan-out' {
 
     It 'skips folders that reject $search instead of failing the whole call' {
         $r = Invoke-SearchArchive -Ctx $script:Ctx -Query 'payroll'
-        @($r.folders_skipped) | Should -Be @('FolderC')
+        @($r.folders_skipped) | Should -Be @('archive/FolderC')
         $r.count | Should -Be 3
+    }
+
+    It 'tags every result with its store and reports scope' {
+        $r = Invoke-SearchArchive -Ctx $script:Ctx -Query 'payroll'
+        $r.scope | Should -Be 'archive'
+        @($r.results).store | Should -Be @('archive', 'archive', 'archive')
     }
 
     It 'truncates to MaxResults and flags truncation' {
@@ -232,5 +238,65 @@ Describe 'Invoke-SearchArchive - per-folder $search fan-out' {
         $msgCalls = @($script:GraphCalls | Where-Object { $_ -match '/messages\?' })
         $msgCalls.Count | Should -Be 3
         foreach ($c in $msgCalls) { $c | Should -Match 'mailFolders/f-[abc]/messages' }
+    }
+}
+
+Describe 'Invoke-SearchArchive - scope primary / both (v0.4.0)' {
+
+    BeforeEach {
+        $script:GraphCalls       = @()
+        $script:ArchiveRootCache = $null
+        $script:PrimaryRootCache = $null
+        $script:Ctx = [PSCustomObject]@{}
+        # Archive: ArchFolder(1 msg). Primary: Inbox(1 msg).
+        $script:GraphHandler = { param($Uri)
+            if ($Uri -match 'archivemsgfolderroot') {
+                return (New-GraphValue (New-StubFolder -Id 'oa-root' -Name 'TOIS' -Items 0 -Children 1))
+            }
+            if ($Uri -match 'mailFolders/msgfolderroot\?') {
+                return (New-GraphValue (New-StubFolder -Id 'pri-root' -Name 'Primary TOIS' -Items 0 -Children 1))
+            }
+            throw "Unexpected Graph call: $Uri"
+        }
+        $script:GraphPagedHandler = { param($Uri)
+            if ($Uri -match 'mailFolders/oa-root/childFolders') {
+                return (New-GraphPage @((New-StubFolder -Id 'f-arch' -Name 'ArchFolder' -Items 1 -Children 0)))
+            }
+            if ($Uri -match 'mailFolders/pri-root/childFolders') {
+                return (New-GraphPage @((New-StubFolder -Id 'f-inbox' -Name 'Inbox' -Items 1 -Children 0)))
+            }
+            if ($Uri -match 'mailFolders/f-arch/messages') {
+                return (New-GraphPage @((New-StubMessage -Id 'm-arch' -Received '2022-04-20T10:00:00Z' -Subject 'first day')))
+            }
+            if ($Uri -match 'mailFolders/f-inbox/messages') {
+                return (New-GraphPage @((New-StubMessage -Id 'm-pri' -Received '2026-08-03T09:00:00Z' -Subject 'first day')))
+            }
+            throw "Unexpected paged Graph call: $Uri"
+        }
+    }
+
+    It "scope 'both' merges hits from the archive and the primary mailbox with store tags" {
+        $r = Invoke-SearchArchive -Ctx $script:Ctx -Query 'first day' -Scope 'both'
+        $r.scope            | Should -Be 'both'
+        $r.count            | Should -Be 2
+        $r.folders_searched | Should -Be 2
+        @($r.results).id     | Should -Be @('m-pri', 'm-arch')   # newest first
+        @($r.results).store  | Should -Be @('primary', 'archive')
+        @($r.results).folder | Should -Be @('Inbox', 'ArchFolder')
+    }
+
+    It "scope 'primary' searches only the primary tree and never resolves the archive root" {
+        $r = Invoke-SearchArchive -Ctx $script:Ctx -Query 'first day' -Scope 'primary'
+        $r.count | Should -Be 1
+        $r.results[0].id    | Should -Be 'm-pri'
+        $r.results[0].store | Should -Be 'primary'
+        @($script:GraphCalls | Where-Object { $_ -match 'archivemsgfolderroot' }).Count | Should -Be 0
+    }
+
+    It "scope 'archive' (default) never touches the primary root" {
+        $r = Invoke-SearchArchive -Ctx $script:Ctx -Query 'first day'
+        $r.count | Should -Be 1
+        $r.results[0].store | Should -Be 'archive'
+        @($script:GraphCalls | Where-Object { $_ -match 'mailFolders/msgfolderroot' }).Count | Should -Be 0
     }
 }

@@ -68,7 +68,7 @@ Release: bump the file's internal version header → update its row here → tag
 | `scripts/Get-EDiscoverySearchStatus.ps1` | 1.1.0 | reads an app-created search's estimate app-only |
 | `scripts/Get-EDiscoveryAlertConfig.ps1` | 1.0.0 | read-only inventory of alert policies watching eDiscovery (PS 5.1) |
 | `scripts/Get-EDiscoveryAuditActor.ps1` | 1.1.0 | unified-audit actor/entity for alert-tuning suppression (PS 5.1) |
-| `scripts/Test-EDiscoveryExport.ps1` | 1.2.0 | Full export-leg repro + unzip/parse/column-map (BUGFIX Phase 1 + regression) |
+| `scripts/Test-EDiscoveryExport.ps1` | 1.3.0 | Full export-leg repro + unzip/parse/column-map (BUGFIX Phase 1 + regression); transcript to logs/ |
 | `scripts/Test-OutlookArchiveOpen.ps1` | 1.2.0 | D0 spike (PASSED): Outlook COM open by proptag 0x1035001F |
 | `scripts/Get-ArchiveConfig.ps1` | 1.0.0 | PS 5.1 EXO archive config read (AutoExpandingArchiveEnabled) |
 | `scripts/Initialize-ArtifactSigning.ps1` | 1.2.0 | Provisions Artifact Signing (account, roles, cert profile); post-rename role names + live token probe |
@@ -79,25 +79,25 @@ Release: bump the file's internal version header → update its row here → tag
 
 ## local-mcp — local stdio MCP (PowerShell 7)
 
-**Current release:** `0.3.1`. The `.psd1` `ModuleVersion` is public-facing.
+**Current release:** `0.3.2` (archive_search scope: archive | primary | both — results tagged with store). The `.psd1` `ModuleVersion` is public-facing.
 Release: bump `.psd1` → walk this table → Pester green (`Invoke-Pester ./tests/Pester`) → tag `local-mcp-vX.Y.Z`.
 Phase markers: 0.0.x spike · 0.2.0 read-only · **0.3.0 write tools (current)** · 0.4.0 HTTPS hosted · 1.0.0 stable.
 
 | Path | Current | Anchor |
 |---|---|---|
-| `ExchangeArchiveMcp.psd1` | `0.3.1` | `ModuleVersion` (source of truth) |
-| `src/Server.ps1` | `0.3.2` | `# Version:` |
+| `ExchangeArchiveMcp.psd1` | `0.3.2` | `ModuleVersion` (source of truth) |
+| `src/Server.ps1` | `0.3.3` | `# Version:` |
 | `src/Auth/Connect-McpGraph.ps1` | `0.2.0` | `# Version:` |
 | `src/Auth/Resolve-UserContext.ps1` | `0.2.0` | `# Version:` |
 | `src/Lib/Invoke-McpGraph.ps1` | `0.2.0` | `# Version:` |
-| `src/Lib/Get-ArchiveRoot.ps1` | `0.3.0` | `# Version:` |
+| `src/Lib/Get-ArchiveRoot.ps1` | `0.4.0` | `# Version:` |
 | `src/Lib/ConvertTo-KqlQuery.ps1` | `0.3.0` | `# Version:` |
 | `src/Lib/Write-AuditLog.ps1` | `0.2.0` | `# Version:` |
 | `src/Lib/New-ConfirmationToken.ps1` | `0.2.0` | `# Version:` |
 | `src/Lib/Test-ReplayGuard.ps1` | `0.1.0` | `# Version:` |
 | `src/Lib/Resolve-MailFolder.ps1` | `0.1.0` | `# Version:` |
 | `src/Lib/Invoke-WriteOp.ps1` | `0.1.0` | `# Version:` |
-| `src/Tools/Search-Archive.ps1` | `0.3.0` | `# Version:` |
+| `src/Tools/Search-Archive.ps1` | `0.4.0` | `# Version:` |
 | `src/Tools/Get-ArchiveMessage.ps1` | `0.2.0` | `# Version:` |
 | `src/Tools/Get-ArchiveAttachment.ps1` | `0.2.0` | `# Version:` |
 | `src/Tools/List-ArchiveFolders.ps1` | `0.2.1` | `# Version:` |

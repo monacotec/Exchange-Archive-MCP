@@ -1,4 +1,6 @@
-# Version: 1.2.0
+# Version: 1.3.0
+# 1.3.0: full run output captured to a timestamped log under foundry-mcp\logs\
+#        (transcript; flushed on early exits too since the process ends).
 # Test-EDiscoveryExport.ps1 — reproduces the archive_get_search_results EXPORT leg
 # app-only, printing the RAW HTTP status/body at every step so the failure names
 # itself (vs. the tool's generic "Request failed."). Phase 1 of
@@ -26,6 +28,14 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Capture the whole run to a log file in the project (foundry-mcp\logs\).
+$script:LogDir = Join-Path $PSScriptRoot '..\logs'
+if (-not (Test-Path $script:LogDir)) { New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null }
+$script:LogPath = Join-Path (Resolve-Path $script:LogDir).Path ("ediscovery-export-{0}.log" -f (Get-Date).ToString('yyyyMMdd-HHmmss'))
+Start-Transcript -Path $script:LogPath | Out-Null
+Write-Host "Logging this run to: $script:LogPath" -ForegroundColor DarkGray
+
 function Ok  ($t) { Write-Host "  [PASS] $t" -ForegroundColor Green }
 function No  ($t) { Write-Host "  [FAIL] $t" -ForegroundColor Red }
 function Info($t) { Write-Host "  [info] $t" -ForegroundColor DarkGray }
@@ -229,4 +239,6 @@ else {
 }
 
 Info "Cleanup: Remove-Item '$zipPath','$extract' -Recurse -Force"
-Write-Host "`nPaste the output back to Claude — the ZIP members + chosen-CSV rows/columns pinpoint the parser fix." -ForegroundColor Cyan
+Write-Host "`nLog saved to: $script:LogPath" -ForegroundColor Cyan
+Write-Host 'Give the log file (or paste its contents) back to Claude - the ZIP members + chosen-CSV rows/columns pinpoint any parser issue.' -ForegroundColor Cyan
+Stop-Transcript | Out-Null
