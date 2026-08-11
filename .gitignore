@@ -49,6 +49,10 @@ logs/
 *.skill
 pdq-deploy/*.tar
 
+# ── Local triage screenshots (contain tenant identifiers; keep out of the repo) ──
+screenshots/
+Screenshot*.jpg
+
 # ── Editor / OS cruft ────────────────────────────────────────────────────────
 .vs/
 *.swp
