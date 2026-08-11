@@ -59,9 +59,9 @@ Release: bump the file's internal version header → update its row here → tag
 | `scripts/Get-McpUserActivity.ps1` | 1.3.0 | Per-user tool-call/error lookup: allowlist check, app state, telemetry sanity, v3.6.1 message-embedded audit JSON |
 | `scripts/Get-McpSigninTrace.ps1` | 1.1.0 | Deploy/config history + raw request dump + Entra sign-in log per app (pre-tool-layer failures) |
 | `scripts/Get-McpBundleHistory.ps1` | 1.1.0 | Live bundle version via /admin/host/status (az-tunneled) + trace history; caught the 4.44.0→4.46.0 drift |
-| `scripts/Audit-AppPermissions.ps1` | 1.1.0 | Read-only least-privilege audit vs code-verified baseline + posture checks (owners, assignment, secrets, redirects) |
-| `scripts/Tighten-AppRegistration.ps1` | 1.1.0 | Applies the audit's tightening items: drop eDiscovery.Read.All, owners, assignment-required + user assignments (interim 8-user roster pending group), legacy redirect removal; idempotent, mutation-logged |
-| `scripts/Enable-McpAccessRequests.ps1` | 1.0.0 | Group-based access (SG-Exchange-Archive-MCP-Users): create/seed group, assign to app, optional per-user cleanup; prints the portal-only self-service request-flow setup |
+| `scripts/Audit-AppPermissions.ps1` | 1.1.1 | Read-only least-privilege audit vs code-verified baseline + posture checks (owners, assignment, secrets, redirects) |
+| `scripts/Tighten-AppRegistration.ps1` | 1.1.1 | Applies the audit's tightening items: drop eDiscovery.Read.All, owners, assignment-required + user assignments (interim 8-user roster pending group), legacy redirect removal; idempotent, mutation-logged. APPLIED 2026-08-11 — all green |
+| `scripts/Enable-McpAccessRequests.ps1` | 1.1.0 | Group-based access (SG-Exchange-Archive-MCP-Users): create/seed group, assign to app, optional per-user cleanup; scripted Identity Governance access package (My Access request + approval) — the enterprise-app Self-service blade doesn't exist for custom OIDC apps |
 | `scripts/Initialize-EDiscoveryAccess.ps1` | 1.0.0 | E0 prereqs: Graph app roles, Purview SP + eDiscovery Manager, standing case (PS 5.1) |
 | `scripts/Invoke-EDiscoverySpike.ps1` | 1.1.0 | E0 spike (PASSED): noncustodialSources bind mechanism |
 | `scripts/Test-EDiscoveryAppAccess.ps1` | 1.1.0 | app-only token roles + API replay; proved case-ownership gate |

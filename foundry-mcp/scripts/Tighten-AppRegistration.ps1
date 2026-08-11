@@ -1,6 +1,8 @@
 #Requires -Version 7.0
 #Requires -Modules Microsoft.Graph.Authentication
-# Version: 1.1.0
+# Version: 1.1.1
+# 1.1.1: @(...)[0] lookups replaced with Select-Object -First 1 — StrictMode
+#        throws on indexing an empty result (bit Enable-McpAccessRequests live).
 # 1.1.0: default roster = every user observed connecting in the 30d sign-in
 #        logs (jmonaco, super-jmonaco, xtsai, egordon, dfishbaum, dave) plus
 #        jeff + sandesh (approved 2026-08-11). Individual assignments are
@@ -93,21 +95,21 @@ Connect-MgGraph -TenantId $TenantId -Scopes 'Application.ReadWrite.All','AppRole
 
 try {
     $appFilter = [Uri]::EscapeDataString("appId eq '$AppId'")
-    $app = @((Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=$appFilter" -OutputType PSObject).value)[0]
-    $sp  = @((Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=$appFilter" -OutputType PSObject).value)[0]
+    $app = (Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=$appFilter" -OutputType PSObject).value | Select-Object -First 1
+    $sp  = (Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=$appFilter" -OutputType PSObject).value | Select-Object -First 1
     if (-not $app -or -not $sp) { throw "App registration or service principal for $AppId not found." }
     Ok "$($app.displayName) (app $($app.id), SP $($sp.id))"
 
     function Resolve-UserId ([string]$Upn) {
-        $u = @((Invoke-MgGraphRequest -Method GET -Uri ("https://graph.microsoft.com/v1.0/users?`$filter=" + [Uri]::EscapeDataString("userPrincipalName eq '$Upn'") + '&$select=id,userPrincipalName') -OutputType PSObject).value)[0]
+        $u = (Invoke-MgGraphRequest -Method GET -Uri ("https://graph.microsoft.com/v1.0/users?`$filter=" + [Uri]::EscapeDataString("userPrincipalName eq '$Upn'") + '&$select=id,userPrincipalName') -OutputType PSObject).value | Select-Object -First 1
         if (-not $u) { throw "User $Upn not found in the tenant." }
         return $u.id
     }
 
     # ── 1. Remove redundant app role eDiscovery.Read.All ─────────────────────
     Write-Host "`n=== 1. Remove redundant Graph app role eDiscovery.Read.All ===" -ForegroundColor Cyan
-    $graphSp = @((Invoke-MgGraphRequest -Method GET -Uri ("https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=" + [Uri]::EscapeDataString("appId eq '$graphResourceAppId'")) -OutputType PSObject).value)[0]
-    $readRole = @($graphSp.appRoles | Where-Object { $_.value -eq 'eDiscovery.Read.All' })[0]
+    $graphSp = (Invoke-MgGraphRequest -Method GET -Uri ("https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=" + [Uri]::EscapeDataString("appId eq '$graphResourceAppId'")) -OutputType PSObject).value | Select-Object -First 1
+    $readRole = $graphSp.appRoles | Where-Object { $_.value -eq 'eDiscovery.Read.All' } | Select-Object -First 1
     if (-not $readRole) { throw 'Could not resolve the eDiscovery.Read.All role id on the Graph SP.' }
 
     $assignments = @((Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$($sp.id)/appRoleAssignments" -OutputType PSObject).value)
@@ -124,7 +126,7 @@ try {
 
     # Drop the declaration too, if present.
     $rraAll   = @($app.requiredResourceAccess)
-    $graphRra = @($rraAll | Where-Object { $_.resourceAppId -eq $graphResourceAppId })[0]
+    $graphRra = $rraAll | Where-Object { $_.resourceAppId -eq $graphResourceAppId } | Select-Object -First 1
     if ($graphRra -and (@($graphRra.resourceAccess | Where-Object { $_.id -eq $readRole.id }).Count -gt 0)) {
         if ($PSCmdlet.ShouldProcess('application', 'remove eDiscovery.Read.All from requiredResourceAccess')) {
             $newAccess = @($graphRra.resourceAccess | Where-Object { $_.id -ne $readRole.id })

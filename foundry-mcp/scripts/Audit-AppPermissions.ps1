@@ -1,6 +1,8 @@
 #Requires -Version 7.0
 #Requires -Modules Microsoft.Graph.Authentication
-# Version: 1.1.0
+# Version: 1.1.1
+# 1.1.1: @(...)[0] lookups replaced with Select-Object -First 1 — StrictMode
+#        throws on indexing an empty result (bit Enable-McpAccessRequests live).
 # 1.1.0: email/profile/openid reclassified as expected — they are OIDC sign-in
 #        claim scopes consented by Set-ClaudeConnectorAuth.ps1; Easy Auth's
 #        caller-identity claims (preferred_username) depend on them.
@@ -78,9 +80,9 @@ Connect-MgGraph -TenantId $TenantId -Scopes 'Application.Read.All','Directory.Re
 try {
     Write-Host "`n=== 1. Locate app registration and service principal ===" -ForegroundColor Cyan
     $appFilter = [Uri]::EscapeDataString("appId eq '$AppId'")
-    $app = @((Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=$appFilter" -OutputType PSObject).value)[0]
+    $app = (Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=$appFilter" -OutputType PSObject).value | Select-Object -First 1
     if (-not $app) { throw "App registration $AppId not found." }
-    $sp = @((Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=$appFilter" -OutputType PSObject).value)[0]
+    $sp = (Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=$appFilter" -OutputType PSObject).value | Select-Object -First 1
     if (-not $sp) { throw "Service principal for $AppId not found." }
     Ok "$($app.displayName) (app objectId $($app.id), SP objectId $($sp.id))"
 
@@ -123,7 +125,7 @@ try {
     $seenRoles = [System.Collections.Generic.List[string]]::new()
     foreach ($ra in $roleAssignments) {
         $res  = Get-ResourceSp $ra.resourceId
-        $role = @($res.appRoles | Where-Object { $_.id -eq $ra.appRoleId })[0]
+        $role = $res.appRoles | Where-Object { $_.id -eq $ra.appRoleId } | Select-Object -First 1
         $name = if ($role) { $role.value } else { $ra.appRoleId }
         $key  = "$($res.appId)|$name"
         [void]$seenRoles.Add($key)
@@ -141,14 +143,14 @@ try {
 
     Write-Host "`n=== 4. Declared vs granted (requiredResourceAccess drift) ===" -ForegroundColor Cyan
     foreach ($rra in @($app.requiredResourceAccess)) {
-        $resSp = @((Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=$([Uri]::EscapeDataString("appId eq '$($rra.resourceAppId)'"))" -OutputType PSObject).value)[0]
+        $resSp = (Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=$([Uri]::EscapeDataString("appId eq '$($rra.resourceAppId)'"))" -OutputType PSObject).value | Select-Object -First 1
         foreach ($acc in @($rra.resourceAccess)) {
             if ($acc.type -eq 'Scope') {
-                $s = @($resSp.oauth2PermissionScopes | Where-Object { $_.id -eq $acc.id })[0]
+                $s = $resSp.oauth2PermissionScopes | Where-Object { $_.id -eq $acc.id } | Select-Object -First 1
                 $key = "$($rra.resourceAppId)|$($s.value)"
                 if ($key -notin $seenDelegated) { Info "declared but not granted (harmless, prune for tidiness): delegated $($resSp.displayName)/$($s.value)" }
             } else {
-                $r = @($resSp.appRoles | Where-Object { $_.id -eq $acc.id })[0]
+                $r = $resSp.appRoles | Where-Object { $_.id -eq $acc.id } | Select-Object -First 1
                 $key = "$($rra.resourceAppId)|$($r.value)"
                 if ($key -notin $seenRoles) { Info "declared but not granted (harmless, prune for tidiness): app role $($resSp.displayName)/$($r.value)" }
             }
