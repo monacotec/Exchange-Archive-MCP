@@ -1,0 +1,40 @@
+Search for every "First Day at GI Partners" new-hire bio email across BOTH the
+online archive and the live mailbox, then give me a consolidated, de-duplicated list.
+
+TARGET
+- Mailbox: [me  |  user@gipartners.com]
+- Subject to match: "First Day at GI Partners"   (match the SUBJECT only)
+- Date range: [all-time  |  YYYY-MM-DD to YYYY-MM-DD]
+
+RULES
+1. Do NOT filter by sender. This announcement has been sent from the shared
+   hr@gipartners.com mailbox AND from individual HR staff accounts over the years,
+   so a sender filter will miss messages. Subject-only matching is required.
+2. Query BOTH sources:
+   - Online archive: Exchange Archive MCP (eDiscovery). Kick off the search, poll
+     the status/report to completion (it is async - keep polling ~20s until the
+     report is 'complete', do not stop at the first "generating" response), then
+     retrieve results.
+   - Live mailbox: Microsoft 365 Outlook search. For a mailbox other than mine,
+     use the shared/delegated mailbox owner parameter.
+3. The archive pull is capped at 100 items with no offset. If the match count is
+   over 100, split the retrieval into date windows (e.g. received<CUTOFF) and pull
+   each window so nothing is dropped. Report the total match count vs. how many you
+   actually retrieved, and flag any window you could not fully page.
+4. De-duplicate across both stores by internet_message_id.
+5. Separate the actual bio announcements from noise. Treat as NOISE (list counts
+   only, not in the main table): calendar invites (Calendar folder), "Accepted:"
+   receipts, Deleted Items / Recoverable Items copies, HappyFox helpdesk tickets,
+   and RE:/FW: reply threads. The real bio emails are the plain "First Day at GI
+   Partners" (or "First Day at GI Partners: <Name>") messages.
+
+OUTPUT
+- A table of the distinct bio emails, newest first: Received (date) | Sender |
+  Subject | Folder | Present in (Live / Archive / Both) | internet_message_id.
+- A short roster of the DISTINCT senders with the date window each was active,
+  so I can see the shared-mailbox vs. individual-sender transitions.
+- Coverage summary: total subject matches, how many retrieved, the date span
+  covered, and anything still unretrieved.
+- Then ask me if I want it exported to .xlsx under C:\GI\Logs (columns: date,
+  sender, subject, folder, source, message-ID, jump links, plus an is_noise flag).
+Do not fabricate message IDs or links - only report what the tools return.
