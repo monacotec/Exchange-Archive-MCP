@@ -64,7 +64,7 @@ Release: bump the file's internal version header → update its row here → tag
 | `scripts/Enable-McpAccessRequests.ps1` | 1.1.2 | Group-based access (SG-Exchange-Archive-MCP-Users): create/seed group, assign to app, optional per-user cleanup; scripted Identity Governance access package (My Access request + approval) — the enterprise-app Self-service blade doesn't exist for custom OIDC apps. APPLIED 2026-08-11 (group/members/assignment/catalog/package/roleScope) |
 | `scripts/Initialize-EDiscoveryAccess.ps1` | 1.0.0 | E0 prereqs: Graph app roles, Purview SP + eDiscovery Manager, standing case (PS 5.1) |
 | `scripts/Invoke-EDiscoverySpike.ps1` | 1.1.0 | E0 spike (PASSED): noncustodialSources bind mechanism |
-| `scripts/Test-EDiscoveryAppAccess.ps1` | 1.1.0 | app-only token roles + API replay; proved case-ownership gate |
+| `scripts/Test-EDiscoveryAppAccess.ps1` | 1.2.0 | app-only token roles + API replay; baseline = ReadWrite.All only (Read.All removed 2026-08-11), legacy-case 401s reframed as expected gate checks, transcript to logs/ |
 | `scripts/Get-EDiscoverySearchStatus.ps1` | 1.1.0 | reads an app-created search's estimate app-only |
 | `scripts/Get-EDiscoveryAlertConfig.ps1` | 1.0.0 | read-only inventory of alert policies watching eDiscovery (PS 5.1) |
 | `scripts/Get-EDiscoveryAuditActor.ps1` | 1.1.0 | unified-audit actor/entity for alert-tuning suppression (PS 5.1) |

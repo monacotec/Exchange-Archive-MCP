@@ -1,7 +1,13 @@
-# Version: 1.1.0
-# Test-EDiscoveryAppAccess.ps1 — replays the function's failing app-only
-# eDiscovery calls from your shell, to separate "token is wrong" from
-# "service-side RBAC not propagated / case tier".
+# Version: 1.2.0
+# 1.2.0 (2026-08-11): baseline updated for the least-privilege pass —
+#   eDiscovery.Read.All was REMOVED as redundant (ReadWrite.All supersedes);
+#   its absence is now the PASS and its presence the failure. The legacy
+#   standing-case replay (section 4) is reframed as a gate check: those 401s
+#   are the case-ownership gate working as designed (production uses
+#   one-case-per-caller app-owned cases since ediscovery.py v1.7.0).
+# Test-EDiscoveryAppAccess.ps1 — replays the function's app-only eDiscovery
+# calls from your shell, to separate "token is wrong" from "service-side RBAC
+# not propagated / case tier".
 #
 # What it does (read-only except the same noncustodialDataSource POST the
 # function attempts):
@@ -35,6 +41,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Capture the whole run to a log file in the project (foundry-mcp\logs\).
+$script:LogDir = Join-Path $PSScriptRoot '..\logs'
+if (-not (Test-Path $script:LogDir)) { New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null }
+$script:LogPath = Join-Path (Resolve-Path $script:LogDir).Path ("ediscovery-appaccess-{0}.log" -f (Get-Date).ToString('yyyyMMdd-HHmmss'))
+Start-Transcript -Path $script:LogPath | Out-Null
+Write-Host "Logging this run to: $script:LogPath" -ForegroundColor DarkGray
+
 function Ok  ($t) { Write-Host "  [PASS] $t" -ForegroundColor Green }
 function No  ($t) { Write-Host "  [FAIL] $t" -ForegroundColor Red }
 function Info($t) { Write-Host "  [info] $t" -ForegroundColor DarkGray }
@@ -66,21 +79,29 @@ $claims = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($payload))
 $roles = @()
 if ($claims.PSObject.Properties.Match('roles').Count -gt 0) { $roles = @($claims.roles) }
 Info ("roles: " + ($(if ($roles.Count) { $roles -join ', ' } else { '(none)' })))
-foreach ($need in @('eDiscovery.Read.All', 'eDiscovery.ReadWrite.All')) {
-    if ($roles -contains $need) { Ok "$need present in token" }
-    else { No "$need MISSING from token - app-role assignment not propagated yet; wait and re-run" }
-}
+if ($roles -contains 'eDiscovery.ReadWrite.All') { Ok 'eDiscovery.ReadWrite.All present in token (the one required role)' }
+else { No 'eDiscovery.ReadWrite.All MISSING from token - app-role assignment not propagated yet; wait and re-run' }
+# Least-privilege pass 2026-08-11: Read.All was removed as redundant. Its
+# absence is the desired state; presence means a cached token (~1h lifetime)
+# or the removal has not propagated.
+if ($roles -contains 'eDiscovery.Read.All') { No 'eDiscovery.Read.All STILL in token - removed 2026-08-11 as redundant; token may be cached (~1h) or removal not yet propagated' }
+else { Ok 'eDiscovery.Read.All absent (removed 2026-08-11 - desired least-privilege state)' }
 
-# ── 4. Replay the function's calls ────────────────────────────────────────────
-Write-Host "`n=== 4. eDiscovery API replay ===" -ForegroundColor Cyan
+# ── 4. Legacy standing case: the case-ownership gate (401s are EXPECTED) ─────
+# The app is an eDiscovery MANAGER and only reaches cases it created itself;
+# this human-created case proved that gate on 2026-07-22. Production has used
+# app-owned one-case-per-caller since ediscovery.py v1.7.0 — section 5 is the
+# check that reflects the live data path.
+Write-Host "`n=== 4. Legacy standing case (expected 401s - case-ownership gate) ===" -ForegroundColor Cyan
 $headers = @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/json' }
 $base = "https://graph.microsoft.com/v1.0/security/cases/ediscoveryCases"
 
-function Try-Call ($Method, $Url, $Body, $Label) {
+function Try-Call ($Method, $Url, $Body, $Label, [switch]$ExpectGated) {
     try {
         if ($Body) { $r = Invoke-RestMethod -Method $Method -Uri $Url -Headers $headers -Body $Body }
         else       { $r = Invoke-RestMethod -Method $Method -Uri $Url -Headers $headers }
-        Ok $Label
+        if ($ExpectGated) { Info "$Label -> unexpectedly SUCCEEDED (gate no longer applies to this case?)" }
+        else { Ok $Label }
         return $r
     }
     catch {
@@ -90,18 +111,22 @@ function Try-Call ($Method, $Url, $Body, $Label) {
             $status = [int]$_.Exception.Response.StatusCode
             try { $bodyText = $_.ErrorDetails.Message } catch {}
         }
-        No ("{0} -> HTTP {1}  {2}" -f $Label, $status, ($bodyText -replace '\s+', ' '))
+        if ($ExpectGated -and $status -eq 401) {
+            Ok ("{0} -> HTTP 401 (case-ownership gate intact - expected)" -f $Label)
+        } else {
+            No ("{0} -> HTTP {1}  {2}" -f $Label, $status, ($bodyText -replace '\s+', ' '))
+        }
         return $null
     }
 }
 
-$case = Try-Call GET "$base/$CaseId" $null "GET case $CaseId"
+$case = Try-Call GET "$base/$CaseId" $null "GET legacy case $CaseId" -ExpectGated
 if ($case) { Info ("case: '{0}'  status: {1}" -f $case.displayName, $case.status) }
 
-Try-Call GET "$base/$CaseId/noncustodialDataSources" $null 'GET noncustodialDataSources' | Out-Null
+Try-Call GET "$base/$CaseId/noncustodialDataSources" $null 'GET noncustodialDataSources (legacy case)' -ExpectGated | Out-Null
 
 $ncBody = @{ dataSource = @{ '@odata.type' = 'microsoft.graph.security.userSource'; email = $TestUpn } } | ConvertTo-Json -Depth 5
-Try-Call POST "$base/$CaseId/noncustodialDataSources" $ncBody "POST noncustodialDataSource for $TestUpn (same call the function makes)" | Out-Null
+Try-Call POST "$base/$CaseId/noncustodialDataSources" $ncBody "POST noncustodialDataSource (legacy case)" -ExpectGated | Out-Null
 
 # ── 5. Case-ownership hypothesis ──────────────────────────────────────────────
 # eDiscovery MANAGERS only see cases they created or are members of. The
@@ -129,4 +154,6 @@ else {
     Write-Host "`n  App cannot create cases either -> app-only is blocked service-side: Purview RBAC still propagating (wait ~30-60 min from init and re-run), or app-only needs premium features / eDiscovery Administrator." -ForegroundColor Yellow
 }
 
-Write-Host "`nPaste the output back to Claude." -ForegroundColor Cyan
+Write-Host "`nLog saved to: $script:LogPath" -ForegroundColor Cyan
+Write-Host 'Give the log file (or paste its contents) back to Claude.' -ForegroundColor Cyan
+Stop-Transcript | Out-Null
