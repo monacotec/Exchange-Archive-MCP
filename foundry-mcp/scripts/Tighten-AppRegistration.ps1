@@ -1,6 +1,12 @@
 #Requires -Version 7.0
 #Requires -Modules Microsoft.Graph.Authentication
-# Version: 1.0.0
+# Version: 1.1.0
+# 1.1.0: default roster = every user observed connecting in the 30d sign-in
+#        logs (jmonaco, super-jmonaco, xtsai, egordon, dfishbaum, dave) plus
+#        jeff + sandesh (approved 2026-08-11). Individual assignments are
+#        interim — Jeff will replace them with a group assignment later.
+#        Per-user resolution failures now flag red and continue instead of
+#        aborting the run between mutations.
 <#
 .SYNOPSIS
     Apply the 2026-08-11 audit's remaining tightening items to the shared
@@ -16,10 +22,10 @@
       2. Add owner(s) to the app registration and enterprise app (default:
          the signed-in admin).
       3. Set "user assignment required" = Yes on the enterprise app and assign
-         the approved users. DEFAULT ASSIGNS: jmonaco + xtsai. Sign-in logs
-         (last 30d) also showed egordon, dfishbaum, and dave using this app -
-         anyone NOT assigned is blocked at sign-in after this step. Re-run with
-         -AssignUsers listing everyone approved if that set is wrong.
+         the approved users. Default roster: every user observed connecting in
+         the 30d sign-in logs plus jeff + sandesh (approved 2026-08-11). Anyone
+         NOT assigned is blocked at sign-in after this step. Interim measure -
+         to be replaced by a security-group assignment.
       4. Remove the legacy v1 redirect URI
          https://login.microsoftonline.com/common/oauth2/nativeclient
          (local MCP uses WAM broker + loopback; the connector uses the
@@ -43,8 +49,18 @@ param(
     [string]$TenantId = '9c1b0b26-717a-4eda-9d7e-7eebc00066bf',
     # Owners to ensure on the app registration + enterprise app. Empty = the signed-in user.
     [string[]]$Owners = @(),
-    # Users allowed to sign in once assignment is required.
-    [string[]]$AssignUsers = @('jmonaco@gipartners.com', 'xtsai@gipartners.com'),
+    # Users allowed to sign in once assignment is required. Interim roster:
+    # to be replaced by a security-group assignment.
+    [string[]]$AssignUsers = @(
+        'jmonaco@gipartners.com'
+        'super-jmonaco@gipartners.com'
+        'xtsai@gipartners.com'
+        'egordon@gipartners.com'
+        'dfishbaum@gipartners.com'
+        'dave@gipartners.com'
+        'jeff@gipartners.com'
+        'sandesh@gipartners.com'
+    ),
     # Skip step 3 (leave sign-in open to all tenant users).
     [switch]$SkipAssignmentRequired
 )
@@ -149,7 +165,8 @@ try {
         # Assign users FIRST so nobody approved is locked out between the two mutations.
         $assigned = @((Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$($sp.id)/appRoleAssignedTo" -OutputType PSObject).value)
         foreach ($upn in $AssignUsers) {
-            $uid = Resolve-UserId $upn
+            try { $uid = Resolve-UserId $upn }
+            catch { Bad "cannot assign ${upn}: $($_.Exception.Message)"; continue }
             if (@($assigned | Where-Object { $_.principalId -eq $uid }).Count -gt 0) {
                 Ok "assigned: $upn (already)"
             } elseif ($PSCmdlet.ShouldProcess('enterprise app', "assign user $upn")) {
@@ -168,8 +185,8 @@ try {
             Ok 'appRoleAssignmentRequired set to true'
         }
         Info "Sign-in now limited to: $($AssignUsers -join ', ')"
-        Info 'Heads-up: 30d sign-in logs also showed egordon, dfishbaum, dave — if any are approved'
-        Info 'users, re-run with -AssignUsers including them (this script is idempotent).'
+        Info 'Interim per-user assignments — when the security group exists, assign the group in'
+        Info 'the portal (Enterprise app > Users and groups) and remove the individual entries.'
     }
 
     # ── 4. Legacy redirect URI ────────────────────────────────────────────────
