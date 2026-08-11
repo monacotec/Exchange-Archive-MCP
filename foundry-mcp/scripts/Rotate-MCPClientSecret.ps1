@@ -1,5 +1,11 @@
 #Requires -Version 7.0
 # Rev 2026-07-02: session teardown moved to try/finally (finding 46); -RevokeOld switch added (finding 47).
+# Rev 2026-08-11: AppObjectId/KeyVaultName now default to the Exchange Archive MCP
+#   app + prod KV (run `-RevokeOld` bare to settle the secret-overlap audit finding).
+#   Keep-selection made deterministic: both current secrets share one expiry date,
+#   so "newest by EndDateTime" was a coin flip that could delete the LIVE secret --
+#   the keeper is now identified by matching credential Hint against the KV value,
+#   with creation-date order as the fallback.
 <#
 .SYNOPSIS
     Rotates the Entra ID client secret for the Exchange Online Archive MCP app registration.
@@ -35,8 +41,9 @@
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [Parameter(Mandatory)] [string] $AppObjectId,
-    [Parameter(Mandatory)] [string] $KeyVaultName,
+    # Object ID (not client ID) of the 'Exchange Archive MCP' app registration.
+    [string] $AppObjectId  = '3954b941-6262-4953-9741-173d42fce9bd',
+    [string] $KeyVaultName = 'kv-gipartners-ai-prod',
     [switch] $RevokeOld
 )
 
@@ -85,8 +92,30 @@ try {
     $keepCount = if ($RevokeOld) { 1 } else { 2 }
     Write-Host "Cleaning up old secrets (keeping $keepCount most recent)..." -ForegroundColor Cyan
 
-    $allSecrets = (Get-MgApplication -ApplicationId $AppObjectId).PasswordCredentials |
-        Sort-Object EndDateTime -Descending
+    $allSecrets = @((Get-MgApplication -ApplicationId $AppObjectId).PasswordCredentials |
+        Sort-Object StartDateTime -Descending)
+
+    # Same-day creations share an EndDateTime, making "newest" ambiguous — and
+    # deleting the credential Key Vault holds would break the OBO fallback path.
+    # The LIVE credential is the one whose Hint (first chars of the value, which
+    # Graph does return) prefixes the KV-stored secret; pin it to the keep slot.
+    $kvValue = $null
+    try {
+        $kvValue = Get-AzKeyVaultSecret -VaultName $KeyVaultName -Name 'mcp-exchange-client-secret' -AsPlainText -ErrorAction Stop
+    } catch {
+        Write-Host "  (Key Vault value not readable — keeping creation-date order: $($_.Exception.Message))" -ForegroundColor DarkGray
+    }
+    if ($kvValue) {
+        $live = @($allSecrets | Where-Object { $_.Hint -and $kvValue.StartsWith($_.Hint) })
+        if ($live.Count -ge 1) {
+            Write-Host "  Live secret identified via Key Vault hint match: $($live[0].DisplayName)" -ForegroundColor Green
+            $allSecrets = @($live) + @($allSecrets | Where-Object { $_.KeyId -notin $live.KeyId })
+        } else {
+            Write-Warning 'No credential Hint matches the Key Vault value — the KV secret may be stale. Aborting removal; run a fresh rotation (no -RevokeOld) first.'
+            return
+        }
+        $kvValue = $null
+    }
 
     $toRemove = $allSecrets | Select-Object -Skip $keepCount
 
