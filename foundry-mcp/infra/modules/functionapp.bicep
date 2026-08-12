@@ -1,5 +1,10 @@
 // functionapp.bicep — Flex Consumption Function App with built-in MCP auth
-// Version: 2.1.0
+// Version: 2.3.0
+//
+// Rev 2026-08-12 (v2.3.0): alwaysReady http=1 declared (idle scale-to-zero
+// broke connector connects; keeps the live Set-McpAlwaysReady.ps1 fix from
+// being reverted by provisioning). Header version also re-synced with the
+// suite manifest (file said 2.1.0 while the manifest said 2.2.0).
 //
 // Rev 2026-07-13 (v2): migrated Y1 classic Consumption → FLEX Consumption (FC1).
 // The MCP extension (mcpToolTrigger) and built-in MCP auth (Easy Auth) require
@@ -189,6 +194,17 @@ resource funcApp 'Microsoft.Web/sites@2024-04-01' = {
       scaleAndConcurrency: {
         instanceMemoryMB:     2048
         maximumInstanceCount: 40
+        // One always-warm instance: Flex scales to zero when idle and the
+        // post-idle cold start exceeds the MCP client's connect timeout
+        // ("Couldn't reach Exchange Archive MCP", 2026-08-12). Applied live
+        // via scripts/Set-McpAlwaysReady.ps1; declared here so provisioning
+        // cannot silently revert it. Bills continuously (~single-digit USD/day).
+        alwaysReady: [
+          {
+            name:          'http'
+            instanceCount: 1
+          }
+        ]
       }
       runtime: {
         name:    'python'

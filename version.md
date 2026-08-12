@@ -43,7 +43,7 @@ Release: bump the file's internal version header → update its row here → tag
 | `azure.yaml` | 1.0.0 | azd service definition |
 | `infra/main.bicep` | 3.2.0 | Wires Log Analytics workspace ID into keyvault module (finding 14) |
 | `infra/main.parameters.json` | 2.2.0 | KEY_VAULT_NAME, API_CENTER_NAME, DEPLOY_API_CENTER tokens |
-| `infra/modules/functionapp.bicep` | 2.2.0 | Easy Auth allowedAudiences endpoint-URL + client-ID forms (AADSTS9010010 fix); lawId output; FC1; fail-closed |
+| `infra/modules/functionapp.bicep` | 2.3.0 | alwaysReady http=1 (idle scale-to-zero broke connector connects — matches the live 2026-08-12 fix). (2.2.0: Easy Auth allowedAudiences endpoint-URL + client-ID forms; lawId output; FC1; fail-closed) |
 | `infra/modules/keyvault.bicep` | 0.3.0 | AuditEvent diagnostic → Log Analytics (finding 14); admin Secrets Officer grant |
 | `infra/modules/apicenter.bicep` | 1.0.0 | Azure API Center resource |
 | `Register-MCPInApiCenter.ps1` | 1.0.0 | Idempotent API Center registration |
