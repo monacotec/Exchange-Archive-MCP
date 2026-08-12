@@ -49,6 +49,10 @@ logs/
 *.skill
 pdq-deploy/*.tar
 
+# ── Compiled bicep output (az bicep build artifacts; regenerable) ────────────
+foundry-mcp/infra/**/*.json
+!foundry-mcp/infra/main.parameters.json
+
 # ── Local triage screenshots (contain tenant identifiers; keep out of the repo) ──
 screenshots/
 Screenshot*.jpg
