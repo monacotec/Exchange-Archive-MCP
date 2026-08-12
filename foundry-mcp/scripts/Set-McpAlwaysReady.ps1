@@ -1,5 +1,10 @@
 #Requires -Version 7.0
-# Version: 1.0.0
+# Version: 1.1.0
+# 1.1.0: PATCH now round-trips the FULL functionAppConfig — ARM validates the
+#        whole object, so a sparse {scaleAndConcurrency} patch fails with
+#        "Runtime name and version must be provided" (observed live
+#        2026-08-12). Also: abort on az PATCH failure ($LASTEXITCODE) and
+#        StrictMode-safe read-back.
 <#
 .SYNOPSIS
     Diagnose / fix the "Couldn't reach Exchange Archive MCP" drop-offs
@@ -111,17 +116,26 @@ if ($arHttp -and [int]$arHttp.instanceCount -ge $AlwaysReadyCount) {
 if ($Apply -and (-not $arHttp -or [int]$arHttp.instanceCount -lt $AlwaysReadyCount)) {
     Write-Host "`n=== 4. Set alwaysReady http = $AlwaysReadyCount ===" -ForegroundColor Cyan
     if ($PSCmdlet.ShouldProcess($FunctionAppName, "set alwaysReady http=$AlwaysReadyCount")) {
-        $newAr = @($arList | Where-Object { $_.name -ne 'http' }) + @(@{ name = 'http'; instanceCount = $AlwaysReadyCount })
-        $patch = @{ properties = @{ functionAppConfig = @{ scaleAndConcurrency = @{ alwaysReady = $newAr } } } }
+        # ARM validates the WHOLE functionAppConfig on PATCH — a sparse
+        # {scaleAndConcurrency} body fails with "Runtime name and version must
+        # be provided". Round-trip the full current config with only
+        # alwaysReady changed.
+        $newAr = @($arList | Where-Object { $_.name -ne 'http' }) + @([PSCustomObject]@{ name = 'http'; instanceCount = $AlwaysReadyCount })
+        if ($scale.PSObject.Properties.Match('alwaysReady').Count -gt 0) { $scale.alwaysReady = $newAr }
+        else { $scale | Add-Member -NotePropertyName alwaysReady -NotePropertyValue $newAr }
+        $patch = @{ properties = @{ functionAppConfig = $fac } }
         $bodyFile = Join-Path $env:TEMP "ar-patch-$([guid]::NewGuid()).json"
         try {
-            $patch | ConvertTo-Json -Depth 8 | Set-Content $bodyFile -Encoding utf8
-            Write-MutationLog "PATCH sites/$FunctionAppName functionAppConfig.scaleAndConcurrency.alwaysReady http=$AlwaysReadyCount"
+            $patch | ConvertTo-Json -Depth 20 | Set-Content $bodyFile -Encoding utf8
+            Write-MutationLog "PATCH sites/$FunctionAppName functionAppConfig (full round-trip) alwaysReady http=$AlwaysReadyCount"
             az rest --method patch --url $siteUrl --headers 'Content-Type=application/json' --body "@$bodyFile" -o none
+            if ($LASTEXITCODE -ne 0) { throw "ARM PATCH failed (az exit $LASTEXITCODE) - see the error above; nothing was verified." }
         } finally { Remove-Item $bodyFile -Force -ErrorAction SilentlyContinue }
-        # Read back.
+        # Read back (StrictMode-safe: alwaysReady may be absent on failure).
         $scale2 = ((az rest --method get --url $siteUrl -o json | ConvertFrom-Json).properties.functionAppConfig).scaleAndConcurrency
-        $ar2 = @($scale2.alwaysReady) | Where-Object { $_.name -eq 'http' } | Select-Object -First 1
+        $ar2List = @()
+        if ($scale2.PSObject.Properties.Match('alwaysReady').Count -gt 0 -and $scale2.alwaysReady) { $ar2List = @($scale2.alwaysReady) }
+        $ar2 = $ar2List | Where-Object { $_.name -eq 'http' } | Select-Object -First 1
         if ($ar2 -and [int]$ar2.instanceCount -ge $AlwaysReadyCount) {
             Ok "alwaysReady http = $($ar2.instanceCount) confirmed. Give it ~2 min, then reconnect the connector."
             Info 'COST: one always-ready instance bills continuously at the baseline rate for'
