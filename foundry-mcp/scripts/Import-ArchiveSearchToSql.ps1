@@ -94,7 +94,7 @@ param(
     [switch] $KeepSearches
 )
 
-$version = '1.3.0'
+$version = '1.3.1'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -188,11 +188,16 @@ try {
     # / serverless resume. Worth retrying; anything else is a real error.
     $script:SqlTransient = @(4060, 40197, 40501, 40613, 49918, 49919, 49920, 10928, 10929, 10053, 10054, 10060, 233, 64, 20)
 
+    # NOTE: the parameter is $Database, never $Db. A [Parameter()] attribute
+    # promotes a function to an ADVANCED function, which inherits the common
+    # parameters -- and -Debug carries the alias 'db', so a $Db parameter is
+    # rejected at parse time ("conflicts with the parameter alias of the same
+    # name for parameter 'Debug'").
     function Invoke-SqlViaToken {
-        param([Parameter(Mandatory)][string]$Sql, [string]$Db, [int]$MaxAttempts = 4)
-        if (-not $Db) { $Db = $SqlDatabase }
+        param([Parameter(Mandatory)][string]$Sql, [string]$Database, [int]$MaxAttempts = 4)
+        if (-not $Database) { $Database = $SqlDatabase }
         for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-            try { return Invoke-SqlViaTokenOnce -Sql $Sql -Db $Db }
+            try { return Invoke-SqlViaTokenOnce -Sql $Sql -Database $Database }
             catch [System.Data.SqlClient.SqlException] {
                 $num = $_.Exception.Number
                 if ($attempt -ge $MaxAttempts -or $num -notin $script:SqlTransient) { throw }
@@ -204,9 +209,10 @@ try {
     }
 
     function Invoke-SqlViaTokenOnce {
-        param([Parameter(Mandatory)][string]$Sql, [string]$Db)
+        param([Parameter(Mandatory)][string]$Sql, [string]$Database)
+        if (-not $Database) { $Database = $SqlDatabase }
         $conn = [System.Data.SqlClient.SqlConnection]::new(
-            "Server=tcp:$SqlServer,1433;Initial Catalog=$Db;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;")
+            "Server=tcp:$SqlServer,1433;Initial Catalog=$Database;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;")
         $conn.AccessToken = Get-SqlAccessToken
         $out = [System.Collections.Generic.List[string]]::new()
         try {
@@ -258,7 +264,7 @@ try {
         # extra modules, and keeps SQL text out of any shell.
         if ($SqlAuth -eq 'Entra') {
             $sqlText = if ($InputFile) { Get-Content -LiteralPath $InputFile -Raw } else { $Query }
-            return Invoke-SqlViaToken -Sql $sqlText -Db $Db
+            return Invoke-SqlViaToken -Sql $sqlText -Database $Db
         }
 
         # NEVER pass SQL through -Q. Any embedded double quote -- and KQL like
