@@ -122,7 +122,8 @@
       <div class="zone-head"><span class="zn">Microsoft Entra ID</span><span class="zc">identity &amp; permissions</span></div>
       <div class="grid">
         <div class="chip key"><div class="cat">App registration</div><div class="nm">Exchange Archive MCP · 9519ca68</div><div class="rl">Exposes api://exchange-mcp (Archive.Read). Public-client callbacks for the connector.</div></div>
-        <div class="chip"><div class="cat">Service principal</div><div class="nm">app roles</div><div class="rl">Graph eDiscovery.Read.All + ReadWrite.All; MicrosoftPurviewEDiscovery eDiscovery.Download.Read.</div></div>
+        <div class="chip"><div class="cat">Service principal</div><div class="nm">app roles</div><div class="rl">Graph eDiscovery.ReadWrite.All; MicrosoftPurviewEDiscovery eDiscovery.Download.Read. Read.All removed as redundant.<span class="pos">least privilege</span></div></div>
+        <div class="chip key"><div class="cat">Access</div><div class="nm">SG-Exchange-Archive-MCP-Users</div><div class="rl">Sign-in requires assignment. Non-members request access at My Access; approval adds them to this group.<span class="pos">self-service</span></div></div>
         <div class="chip"><div class="cat">Credential</div><div class="nm">federated identity (WIF)</div><div class="rl">Links the user-assigned identity to the app reg for secret-free OBO.<span class="pos">secret-free</span></div></div>
         <div class="chip"><div class="cat">Purview role</div><div class="nm">eDiscovery Manager</div><div class="rl">App is a member — the grant that lets it run archive searches.</div></div>
         <div class="chip"><div class="cat">First-party app</div><div class="nm">MicrosoftPurviewEDiscovery · b26e684c</div><div class="rl">Resource the app tokens against to download export reports.</div></div>
@@ -132,8 +133,10 @@
     <section class="zone anim">
       <div class="zone-head"><span class="zn">Azure resources</span><span class="zc">resource group · finresgroup</span></div>
       <div class="grid">
-        <div class="chip key"><div class="cat">Compute</div><div class="nm">func-exchange-mcp-archive-mailbox-mcp</div><div class="rl">The MCP server (Flex Consumption). System-assigned identity reads Key Vault.</div></div>
+        <div class="chip key"><div class="cat">Compute</div><div class="nm">func-exchange-mcp-archive-mailbox-mcp</div><div class="rl">The MCP server (Flex Consumption). System-assigned identity reads Key Vault. One always-ready instance so the connector never waits on a cold start.<span class="pos">always ready</span></div></div>
         <div class="chip"><div class="cat">Plan</div><div class="nm">asp-exchange-mcp-…-mcp</div><div class="rl">Flex Consumption (FC1) hosting plan.</div></div>
+        <div class="chip key"><div class="cat">Database</div><div class="nm">gip-mcp-hub-sql</div><div class="rl">Shared Azure SQL host for MCP data stores — one database per MCP. Entra-only auth, always-on tier.<span class="pos">no SQL logins</span></div></div>
+        <div class="chip"><div class="cat">Database</div><div class="nm">ArchiveIndex</div><div class="rl">Message metadata index built from eDiscovery report exports. Function identity reads/writes; the access group reads.</div></div>
         <div class="chip key"><div class="cat">Secrets</div><div class="nm">kv-exmcp-gi</div><div class="rl">Key Vault — Entra client id/secret, JWT audience/issuer/JWKS. RBAC + purge protection; audit to Log Analytics.</div></div>
         <div class="chip"><div class="cat">Storage</div><div class="nm">saexmcp6kgb4xbh7g</div><div class="rl">Function host storage.<span class="pos">keyless / shared-key off</span></div></div>
         <div class="chip"><div class="cat">Identity</div><div class="nm">uai-exchange-mcp-…-mcp</div><div class="rl">User-assigned identity — WIF assertion + host-storage access.</div></div>
@@ -149,6 +152,7 @@
         <div class="chip"><div class="cat">API</div><div class="nm">Microsoft Graph</div><div class="rl">On-behalf-of (Mail.Read) tried first; app-only for eDiscovery. Cannot address the archive directly — hence eDiscovery.</div></div>
         <div class="chip key"><div class="cat">Service</div><div class="nm">Purview eDiscovery</div><div class="rl">One app-owned case per caller; search → estimate → report-only export. Reaches auto-expanding archives.<span class="pos">per-user isolated</span></div></div>
         <div class="chip"><div class="cat">Mailbox</div><div class="nm">Exchange Online · In-Place Archive</div><div class="rl">The archived email itself — the system of record; read, never copied.</div></div>
+        <div class="chip"><div class="cat">Index</div><div class="nm">metadata only</div><div class="rl">ArchiveIndex stores subject, sender, date, folder and message id — never message bodies or attachments. Sourced from report-only exports.<span class="pos">no content stored</span></div></div>
       </div>
     </section>
 

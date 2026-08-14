@@ -135,9 +135,9 @@
     <h1 class="reveal">Giving our AI assistants secure access to archived email</h1>
     <p class="thesis reveal">A way for approved AI assistants to search employees' <strong>archived</strong> mailboxes — including executives' large auto-expanding archives — with each person able to see only their own email.</p>
     <div class="meta reveal">
-      <span><i class="dot"></i>July 21–24, 2026</span>
-      <span>Four working days</span>
-      <span>Status: working, hardening in progress</span>
+      <span><i class="dot"></i>July 21 – August 14, 2026</span>
+      <span>Updated: 14 Aug 2026</span>
+      <span>Status: in use, hardened; rollout items remain</span>
     </div>
 
     <hr class="rule"/>
@@ -187,6 +187,31 @@
         <h3>Fixed a "hangs and returns nothing" issue <span class="tag done">Done</span></h3>
         <p>A reported freeze traced to Microsoft's archive export now taking ~50 seconds while our tool waited too long in one step. The tool now responds quickly and checks back in the background instead of hanging.</p>
       </li>
+      <li class="step">
+        <span class="node"></span>
+        <h3>Diagnosed and fixed a service outage <span class="tag done">Done</span></h3>
+        <p>A colleague reported the assistant had stopped working. The cause was outside our code: Microsoft shipped a new preview version of a platform component, and our configuration had been set to accept new versions automatically — so a routine restart silently adopted a broken one. We pinned the known-good version, and the service came back immediately. Nothing like it can recur without a deliberate change on our side.</p>
+      </li>
+      <li class="step">
+        <span class="node"></span>
+        <h3>Made the service instantly available <span class="tag done">Done</span></h3>
+        <p>The service had been shutting itself down when idle to save cost, and the first person to use it each morning waited long enough that their connection gave up. One instance now stays warm at all times, for a small ongoing cost.</p>
+      </li>
+      <li class="step">
+        <span class="node"></span>
+        <h3>Tightened permissions &amp; opened self-service access <span class="tag done">Done</span></h3>
+        <p>Audited every permission the system holds against what the code actually uses, removed a redundant one, required explicit assignment to sign in, and closed a stale sign-in path. Staff who need access now request it themselves and are approved — instead of hitting an error with no route forward.</p>
+      </li>
+      <li class="step">
+        <span class="node"></span>
+        <h3>Fixed the audit trail <span class="tag done">Done</span></h3>
+        <p>Investigating the outage revealed that our per-call audit records were losing the caller's identity before reaching the log. Corrected and verified: every tool call is now attributable to a named person.</p>
+      </li>
+      <li class="step">
+        <span class="node"></span>
+        <h3>Built a searchable archive index <span class="tag done">Done</span></h3>
+        <p>Stood up a shared, always-available database so archive searches can be answered instantly from an index instead of re-querying Microsoft each time. It holds only metadata — subject, sender, date, folder — never message content. Built to host the data for future assistants too, not just this one.</p>
+      </li>
     </ol>
 
     <p class="section-label">Where things stand</p>
@@ -194,9 +219,9 @@
       <div>
         <h4>Remaining before we call it 1.0</h4>
         <ul class="list">
-          <li>Ship the just-made responsiveness fix.</li>
           <li>Complete the Microsoft code-signing certificate so the Outlook convenience can roll out firm-wide.</li>
           <li>Quiet the routine security alerts our own searches generate.</li>
+          <li>Move server ownership from an individual to a group, so it survives staffing changes.</li>
           <li>Final security review.</li>
         </ul>
       </div>
@@ -206,6 +231,8 @@
           <li>Workstation security tooling blocked some routine network and sign-in operations; every step was adapted around it.</li>
           <li>A Microsoft product limitation forced the shift to eDiscovery — now a strength, since it also covers auto-expanding archives.</li>
           <li>Sign-in sessions expired mid-work; all cloud actions now run as operator-run scripts with a safeguard against unattended access.</li>
+          <li>A platform component auto-updated itself into an outage. Version now pinned; the same class of surprise is closed off.</li>
+          <li>Connection failures at the front door leave no trace in our logs, so the first investigation was slower than it should have been. Purpose-built diagnostic scripts now cover that blind spot.</li>
         </ul>
       </div>
     </div>
