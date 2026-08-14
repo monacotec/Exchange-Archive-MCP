@@ -72,7 +72,11 @@ param(
     # then to LocalDB for a workstation-local index.
     [string] $SqlServer,
     [string] $SqlDatabase,
+    # Integrated = Windows auth (LocalDB / on-prem). Entra = Azure SQL: without
+    # -SqlUser it tries Entra Integrated (Entra-joined machines); with -SqlUser
+    # it prompts interactively for that account.
     [ValidateSet('Integrated', 'Entra')][string] $SqlAuth = 'Integrated',
+    [string] $SqlUser,
 
     # Azure / eDiscovery
     [string] $SubscriptionId = 'db17a4a4-f677-498a-b4a2-eb401ba9cf29',
@@ -90,7 +94,7 @@ param(
     [switch] $KeepSearches
 )
 
-$version = '1.1.2'
+$version = '1.2.0'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -200,7 +204,12 @@ try {
         }
 
         $argsBase = @('-S', $SqlServer, '-d', $Db, '-I', '-b', '-i', $InputFile)
-        if ($SqlAuth -eq 'Entra') { $argsBase += '-G' } else { $argsBase += '-E' }
+        if ($SqlAuth -eq 'Entra') {
+            $argsBase += '-G'
+            if ($SqlUser) { $argsBase += @('-U', $SqlUser) }
+        } else {
+            $argsBase += '-E'
+        }
         if ($Scalar) { $argsBase += @('-h', '-1', '-W') }
 
         try {
