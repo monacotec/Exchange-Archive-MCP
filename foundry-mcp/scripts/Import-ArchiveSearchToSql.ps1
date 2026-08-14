@@ -90,7 +90,7 @@ param(
     [switch] $KeepSearches
 )
 
-$version = '1.1.1'
+$version = '1.1.2'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -137,22 +137,33 @@ try {
     if (-not $SqlDatabase) { $SqlDatabase = if ($envVals.ContainsKey('ARCHIVE_SQL_DATABASE')) { $envVals['ARCHIVE_SQL_DATABASE'] } else { 'ArchiveIndex' } }
     Ok "SQL target: $SqlServer / $SqlDatabase  (auth: $SqlAuth)"
 
-    # LocalDB automatic instances shut down when idle and are recreated on the
-    # next connection. Starting it explicitly removes the startup race that
-    # otherwise shows up as a bogus 'Login failed for user' (seen 2026-08-14
-    # when two shells connected during the same restart, which also detached
-    # the database from the instance).
-    $isLocalDb = $SqlServer -match '^\(localdb\)\\(.+)$'
-    if ($isLocalDb) {
-        $instance = $matches[1]
-        if (Get-Command sqllocaldb -ErrorAction SilentlyContinue) {
-            $null = & sqllocaldb start $instance 2>&1
-            $state = (& sqllocaldb info $instance 2>&1 | Select-String -Pattern '^State:\s*(.+)$').Matches.Groups[1].Value.Trim()
-            Ok "LocalDB instance '$instance' state: $state"
-        } else {
-            Info 'sqllocaldb not on PATH - cannot pre-start the LocalDB instance'
+    # LocalDB automatic instances shut down after ~5 minutes idle and get a NEW
+    # named pipe when they restart. This loader has long SQL-idle stretches (a
+    # ~2 min estimate probe, then export + download), so the instance can be
+    # gone by the time the next batch runs -- surfacing as 'Server is not found
+    # or not accessible' or a bogus 'Login failed for user' (both seen live
+    # 2026-08-14; one restart also detached the database). Start-LocalDb is
+    # therefore called before every SQL phase AND from the retry handler, where
+    # it is the actual remedy rather than just a wait.
+    $isLocalDb  = $SqlServer -match '^\(localdb\)\\(.+)$'
+    $dbInstance = if ($isLocalDb) { $matches[1] } else { $null }
+    $script:HaveLocalDbTool = [bool](Get-Command sqllocaldb -ErrorAction SilentlyContinue)
+
+    function Start-LocalDb {
+        param([switch]$Report)
+        if (-not $isLocalDb -or -not $script:HaveLocalDbTool) { return }
+        $null = & sqllocaldb start $dbInstance 2>&1
+        if ($Report) {
+            $m = (& sqllocaldb info $dbInstance 2>&1 | Select-String -Pattern '^State:\s*(.+)$')
+            $state = if ($m) { $m.Matches.Groups[1].Value.Trim() } else { 'unknown' }
+            Ok "LocalDB instance '$dbInstance' state: $state"
         }
     }
+
+    if ($isLocalDb -and -not $script:HaveLocalDbTool) {
+        Info 'sqllocaldb not on PATH - cannot keep the LocalDB instance alive across idle gaps'
+    }
+    Start-LocalDb -Report
 
     $schemaFile = Join-Path $PSScriptRoot '..\sql\archive-index-schema.sql'
     if (-not (Test-Path $schemaFile)) { throw "Schema file not found: $schemaFile" }
@@ -202,13 +213,16 @@ try {
                     Start-Sleep -Seconds 30
                     continue
                 }
-                # LocalDB automatic instances stop when idle and are re-created on
-                # demand; a connection landing mid-start fails with a spurious
-                # 'Login failed' / 'Cannot open database'. Short, targeted retry --
-                # a genuine permission problem still surfaces after these.
+                # LocalDB instance stopped (idle timeout) or restarted onto a new
+                # pipe. Restart it and retry -- the restart IS the fix, so this
+                # branch acts rather than just sleeping. Patterns cover every
+                # message seen live: stopped instance, stale pipe, and the
+                # mid-start login failure. A genuine permission or SQL error
+                # still surfaces because none of these patterns match it.
                 if ($isLocalDb -and $attempt -lt $MaxAttempts -and
-                    $text -match 'Login failed for user|Cannot open database|error occurred while establishing') {
-                    Info "LocalDB instance still starting (attempt $attempt/$MaxAttempts) - retrying in 3s..."
+                    $text -match 'Login failed for user|Cannot open database|not found or not accessible|Login timeout expired|SQL Server Network Interfaces|error has occurred while establishing') {
+                    Info "LocalDB instance unavailable (attempt $attempt/$MaxAttempts) - restarting it and retrying..."
+                    Start-LocalDb
                     Start-Sleep -Seconds 3
                     continue
                 }
@@ -513,6 +527,11 @@ try {
         $label = "{0}..{1}" -f $w.From.ToString('yyyy-MM-dd'), $w.To.ToString('yyyy-MM-dd')
         Info "[$windowIndex/$($plan.Count)] window $label ($($w.Count) matches)"
 
+        # The plan phase spends minutes in Graph with no SQL traffic, which is
+        # long enough for a LocalDB instance to idle out. Nudge it awake before
+        # the first batch rather than relying on the retry.
+        Start-LocalDb
+
         # LoadRun row first: provenance survives even if the export fails.
         $runIdRaw = Get-SqlScalar (@"
 SET NOCOUNT ON;
@@ -640,6 +659,7 @@ SELECT CAST(SCOPE_IDENTITY() AS int);
     Ok "load complete: staged $grandStaged, inserted $grandInserted, updated $grandUpdated across $($plan.Count) window(s)"
 
     # ── 7. Verify ─────────────────────────────────────────────────────────────
+    Start-LocalDb
     Invoke-IndexVerification
 
     Write-Host ''
