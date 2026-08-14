@@ -1,8 +1,55 @@
-# CHANGES — Revision 2
+# CHANGES
 
-Plain-language summary of what moved between the rev 1 bundle (`MCP-Exchange-Archive-bundle.zip`) and rev 2 (this package).
+## Since rev 2 — build, incidents and hardening (21 Jul – 14 Aug 2026)
 
-If you read nothing else, read this file. Everything else is just the detail.
+Rev 2 was a *planning* revision. Everything below is what actually happened when it
+was built and run. Commit history is the detail; this is the shape of it.
+
+**Built**
+- Cloud MCP live on the **Purview eDiscovery data path** — Graph's mail API cannot read
+  In-Place Archives at all (`docs/online-archive-graph-findings.md`). One app-owned case
+  per caller; report-only exports.
+- Local MCP corrected to the real Online Archive (`archivemsgfolderroot`, not the primary
+  mailbox's Archive folder) with per-folder fan-out, and `archive_search` gained a
+  `scope` of `archive` / `primary` / `both`.
+- **Archive index** in Azure SQL (`gip-mcp-hub-sql` / `ArchiveIndex`) — metadata only,
+  loaded straight from eDiscovery report exports, with automatic date-window bisection
+  past the 500-item export ceiling.
+- `giparchive:` desktop handler **code-signed** under the firm's verified publisher
+  identity and timestamped.
+
+**Incidents, and what closed them**
+- **Connector outage (11 Aug).** A floating preview extension-bundle range let a host
+  recycle silently adopt a broken build; `tools/list` returned nothing for new sessions.
+  `host.json` now pins an exact version. Never float a preview bundle in production.
+- **Idle drop-offs.** Flex scale-to-zero cold starts exceeded the MCP client's connect
+  timeout; one always-ready instance fixed it, and it is now declared in Bicep so a
+  provision cannot revert it.
+- **Mid-session disconnects.** Fast-return polling left the connection idle past the
+  front end's ~230s kill during user think-time; the async legs now long-poll
+  server-side (~90s), collapsing most searches into one or two calls.
+- **Audit trail was silently empty.** Per-call records used a `custom_dimensions` shape
+  the built-in Functions telemetry drops, so caller identity never reached Log Analytics.
+  Payload is now embedded in the trace message; verified live.
+
+**Hardening**
+- Least-privilege pass: redundant `eDiscovery.Read.All` removed, owner assigned, sign-in
+  gated on assignment, legacy redirect URI dropped, secret overlap closed
+  (`Audit-AppPermissions.ps1` → ALL CHECKS GREEN).
+- Self-service access: group-based assignment plus an Identity Governance access package,
+  so a blocked user has a route instead of an error.
+- Our own eDiscovery searches no longer trip the security alerts they resembled.
+- `version.md` is now verified mechanically (`scripts/Test-VersionManifest.ps1`).
+
+**Archived**
+- `gi-foundry/` — the origin project — moved to `archive/`. What was worth keeping from
+  it is written up in `docs/gi-foundry-lessons.md`.
+
+---
+
+# Revision 2 — what changed from rev 1
+
+Plain-language summary of what moved between the rev 1 bundle (`MCP-Exchange-Archive-bundle.zip`) and rev 2.
 
 ---
 

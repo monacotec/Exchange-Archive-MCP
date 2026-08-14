@@ -190,8 +190,8 @@
       </li>
       <li class="step">
         <span class="node"></span>
-        <h3>Added an "open in Outlook" convenience <span class="tag prog">In progress</span></h3>
-        <p>Built a helper that opens a search result as the real message in desktop Outlook. It needs a one-time Microsoft code-signing certificate (a few-day identity-verification step) before firm-wide rollout.</p>
+        <h3>Added an "open in Outlook" convenience <span class="tag done">Done</span></h3>
+        <p>Built a helper that opens a search result as the real message in desktop Outlook. It required a Microsoft code-signing certificate so Windows trusts it — the identity-verification step that gates that is complete, and the helper is now signed under the firm's verified publisher identity and timestamped. Ready to distribute.</p>
       </li>
       <li class="step">
         <span class="node"></span>
@@ -240,8 +240,9 @@
       <div>
         <h4>Remaining before we call it 1.0</h4>
         <ul class="list">
-          <li>Complete the Microsoft code-signing certificate so the Outlook convenience can roll out firm-wide.</li>
+          <li>Distribute the signed "open in Outlook" helper to staff machines.</li>
           <li>Move server ownership from an individual to a group, so it survives staffing changes.</li>
+          <li>Add automated infrastructure checks to the code repository, so template changes are validated before they reach Azure.</li>
           <li>Final security review.</li>
         </ul>
       </div>

@@ -15,16 +15,17 @@ are now **redirect stubs** pointing here — record version bumps in this file.
 |---|---|---|
 | `README.md` | rev 2 | Suite overview (refreshed 2026-07-22) |
 | `CHANGES.md` | — | Change history |
-| `REMEDIATION-GUIDE.md` | — | 49-finding adversarially-verified remediation guide |
-| `DAY-ZERO-HYGIENE.md` | — | Day-zero hygiene checklist (code patches applied; manual steps open) |
-| `BUG-archive-export-failure.md` | — | Export-latency bug report (fixed in function_app 3.4.0) |
-| `exchange-archive-mcp-online-archive-fix.md` | — | Original Graph-based online-archive fix notes; superseded by the eDiscovery data path but kept as cited rationale |
+| `docs/REMEDIATION-GUIDE.md` | — | 49-finding adversarially-verified remediation guide |
+| `docs/DAY-ZERO-HYGIENE.md` | — | Day-zero hygiene checklist (code patches applied; manual steps open) |
+| `docs/history/BUG-archive-export-failure.md` | — | Export-latency bug report (fixed in function_app 3.4.0) |
+| `docs/history/exchange-archive-mcp-online-archive-fix.md` | — | Original Graph-based online-archive fix notes; superseded by the eDiscovery data path but kept as cited rationale |
 | `docs/` | — | Operational docs, timelines, briefs, runbooks |
 | `plans/` | — | Build plans + decision records |
 | `version.md` | 2.0.0 | This merged suite manifest |
 | `.env.example` | 1.0.0 | Template for the root `.env` (archive-index SQL target); real `.env` is gitignored |
 | `scripts/Test-VersionManifest.ps1` | 1.1.0 | Verifies this manifest against every file's own version anchor; reports drift, missing and unlisted files. Exits 1 so it can gate a release |
 | `docs/build-briefs-pdf.ps1` | 1.0.0 | Renders the HTML briefs to PDF |
+| `docs/gi-foundry-lessons.md` | — | What to keep, and deliberately not inherit, from the archived origin project |
 | `docs/Add-ThemeToggle.ps1` | 1.0.0 | Injects the persisted light/dark toggle into every HTML report; idempotent |
 
 ---
@@ -132,33 +133,20 @@ Phase markers: 0.0.x spike · 0.2.0 read-only · **0.3.0 write tools (current)**
 
 ---
 
-## gi-foundry — Azure AI Foundry IaC & origin repo
+## archive/gi-foundry — origin project (ARCHIVED 2026-08-14)
 
-The Exchange MCP was born here (`gi-foundry/exchange-mcp/`) then promoted to the
-top-level `foundry-mcp/` on 2026-07-02. The `exchange-mcp/` subfolder here is the
-**superseded original**; `foundry-mcp/` is authoritative. Also holds Foundry Hub
-IaC, key/secret rotation, and (unrelated) universal-print assets.
+Eric Gordon's Azure AI Foundry project, imported so this repo could mirror its structure.
+The Exchange MCP was born here (`exchange-mcp/`) and was promoted to top-level
+`foundry-mcp/` on 2026-07-02. Moved to `archive/` once nothing depended on it.
 
-| File | Version | Description |
-|------|---------|-------------|
-| `CLAUDE.md` | 1.0.0 | Project plan |
-| `foundry-iac/main.bicep` | 1.1.0 | Orchestration entry point |
-| `foundry-iac/modules/network.bicep` | 1.0.0 | VNet, DNS, shared storage |
-| `foundry-iac/modules/keyvault.bicep` | 1.0.0 | Key Vault + private endpoint |
-| `foundry-iac/modules/openai.bicep` | 1.1.0 | Azure OpenAI + deployments (keyless, finding 6) |
-| `foundry-iac/modules/foundry.bicep` | 1.1.0 | Hub/Project/OAI connection (AAD keyless) |
-| `foundry-iac/parameters/prod.bicepparam` | 1.0.0 | Prod params |
-| `foundry-iac/parameters/dev.bicepparam` | 1.0.0 | Dev params |
-| `foundry-iac/.github/workflows/bicep-validate.yml` | 1.1.0 | Bicep validation (OIDC login) |
-| `scripts/Deploy-Foundry.ps1` | 1.0.0 | Deployment driver |
-| `scripts/Rotate-OAIKey.ps1` | 1.0.0 | OpenAI key rotation (retire at keyless cutover) |
-| `universal-print/Register-Printers.ps1` | 1.0.0 | Universal Print registration |
-| `universal-print/Set-PrinterShares.ps1` | 1.0.0 | Bulk share assignment |
-
-_(gi-foundry `exchange-mcp/` file versions are historical; live copies are under `foundry-mcp/` above.)_
+**Not version-tracked.** It is a frozen reference, not a component of this suite — its
+files keep whatever versions they had. What was worth carrying forward (Bicep CI with
+OIDC, private-endpoint patterns, dual-key rotation choreography, cost tagging) and what
+was deliberately NOT inherited (app-only Graph permissions with a caller-supplied
+mailbox; a floating extension-bundle range; Y1 Consumption hosting) is written up in
+[`docs/gi-foundry-lessons.md`](docs/gi-foundry-lessons.md).
 
 ---
-
 ## security-baseline/reference-impl — MCP security reference (patterns only)
 
 > Do not copy patterns from this package until its fix pass (findings 1, 8, 9, 19, 24, 33 + Lesson 11) lands — gated before Local MCP Phase 3.

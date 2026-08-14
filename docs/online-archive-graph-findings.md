@@ -1,7 +1,7 @@
 # Online Archive × Microsoft Graph — Findings (2026-07-21/22)
 
 **Status:** CLOSED — Graph's Mail API cannot read In-Place Archives **for anyone**: Microsoft publicly lists archive access as an unshipped EWS-parity gap ("updated timeline in the coming months"; still absent from the May 2026 import/export GA, which covers primary + shared only). Our per-mailbox evidence below is consistent with that — the well-known archive names are enum placeholders, not wired up in Exchange Online. The support-case draft (`microsoft-support-case-draft.md`) is now **optional** (expected answer: "not supported yet"). **End solution:** `plans/ARCHIVE-DATA-PATH-PLAN.md` — Purview eDiscovery data path now, native Graph swap when parity ships. Note the target population includes auto-expanding archives (executives), which even future Mail-API parity may exclude — eDiscovery covers them today.
-**Supersedes:** the integration plan in `exchange-archive-mcp-online-archive-fix.md` §5 (its `archivemsgfolderroot` fix was implemented and is correct per docs, but does not work on this mailbox).
+**Supersedes:** the integration plan in `history/exchange-archive-mcp-online-archive-fix.md` §5 (its `archivemsgfolderroot` fix was implemented and is correct per docs, but does not work on this mailbox).
 
 ## Archive configuration (2026-07-22, `Get-ArchiveConfig.ps1`, PS 5.1)
 
