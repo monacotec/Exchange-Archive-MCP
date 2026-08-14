@@ -37,8 +37,16 @@
     Batch label stored on every load run (provenance). Defaults to a slug of
     the query plus the UTC date.
 
+.PARAMETER CreateDatabase
+    Create the target database if it does not exist (then apply the schema).
+    Use on first run. Creates a database only -- never drops or overwrites one.
+
 .PARAMETER VerifyOnly
     Check schema + index content and mutate nothing. Exits 1 if anything is off.
+
+.EXAMPLE
+    # First run: create the database, apply the schema, load nothing yet.
+    .\Import-ArchiveSearchToSql.ps1 -CreateDatabase -SchemaOnly
 
 .EXAMPLE
     .\Import-ArchiveSearchToSql.ps1 -Query 'subject:"First Day at GI Partners"'
@@ -76,12 +84,13 @@ param(
     [string] $CaseName       = 'Archive Index Loader',
 
     [int]    $ExportItemLimit = 500,
+    [switch] $CreateDatabase,
     [switch] $SchemaOnly,
     [switch] $VerifyOnly,
     [switch] $KeepSearches
 )
 
-$version = '1.0.0'
+$version = '1.1.0'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -128,6 +137,23 @@ try {
     if (-not $SqlDatabase) { $SqlDatabase = if ($envVals.ContainsKey('ARCHIVE_SQL_DATABASE')) { $envVals['ARCHIVE_SQL_DATABASE'] } else { 'ArchiveIndex' } }
     Ok "SQL target: $SqlServer / $SqlDatabase  (auth: $SqlAuth)"
 
+    # LocalDB automatic instances shut down when idle and are recreated on the
+    # next connection. Starting it explicitly removes the startup race that
+    # otherwise shows up as a bogus 'Login failed for user' (seen 2026-08-14
+    # when two shells connected during the same restart, which also detached
+    # the database from the instance).
+    $isLocalDb = $SqlServer -match '^\(localdb\)\\(.+)$'
+    if ($isLocalDb) {
+        $instance = $matches[1]
+        if (Get-Command sqllocaldb -ErrorAction SilentlyContinue) {
+            $null = & sqllocaldb start $instance 2>&1
+            $state = (& sqllocaldb info $instance 2>&1 | Select-String -Pattern '^State:\s*(.+)$').Matches.Groups[1].Value.Trim()
+            Ok "LocalDB instance '$instance' state: $state"
+        } else {
+            Info 'sqllocaldb not on PATH - cannot pre-start the LocalDB instance'
+        }
+    }
+
     $schemaFile = Join-Path $PSScriptRoot '..\sql\archive-index-schema.sql'
     if (-not (Test-Path $schemaFile)) { throw "Schema file not found: $schemaFile" }
 
@@ -141,10 +167,12 @@ try {
         param(
             [string]$Query,
             [string]$InputFile,
+            [string]$Db,
             [switch]$Scalar,
             [int]$MaxAttempts = 5
         )
-        $argsBase = @('-S', $SqlServer, '-d', $SqlDatabase, '-I', '-b')
+        if (-not $Db) { $Db = $SqlDatabase }
+        $argsBase = @('-S', $SqlServer, '-d', $Db, '-I', '-b')
         if ($SqlAuth -eq 'Entra') { $argsBase += '-G' } else { $argsBase += '-E' }
         if ($Scalar) { $argsBase += @('-h', '-1', '-W') }
         if ($InputFile) {
@@ -165,6 +193,16 @@ try {
                 Start-Sleep -Seconds 30
                 continue
             }
+            # LocalDB automatic instances stop when idle and are re-created on
+            # demand; a connection landing mid-start fails with a spurious
+            # 'Login failed' / 'Cannot open database'. Short, targeted retry --
+            # a genuine permission problem still surfaces after these.
+            if ($isLocalDb -and $attempt -lt $MaxAttempts -and
+                $text -match 'Login failed for user|Cannot open database|error occurred while establishing') {
+                Info "LocalDB instance still starting (attempt $attempt/$MaxAttempts) - retrying in 3s..."
+                Start-Sleep -Seconds 3
+                continue
+            }
             throw "sqlcmd failed (exit $LASTEXITCODE): $text"
         }
         throw "sqlcmd could not reach $SqlDatabase after $MaxAttempts attempts (serverless wake-up window exceeded)."
@@ -173,6 +211,23 @@ try {
     function Get-SqlScalar([string]$Q) {
         $v = Invoke-SqlCmd -Query $Q -Scalar
         return ($v -split "`n" | Where-Object { $_ -and $_ -notmatch '^\(\d+ rows affected\)$' } | Select-Object -First 1).Trim()
+    }
+
+    # ── Database bootstrap (creates only; never drops or overwrites) ──────────
+    # Defined after the sqlcmd helpers because PowerShell resolves functions at
+    # call time, not parse time.
+    $dbExists = (Invoke-SqlCmd -Db 'master' -Scalar `
+        -Query "SET NOCOUNT ON; SELECT CASE WHEN DB_ID('$SqlDatabase') IS NULL THEN 0 ELSE 1 END;")
+    $dbExists = ($dbExists -split "`n" | Where-Object { $_.Trim() } | Select-Object -First 1).Trim()
+    if ($dbExists -eq '1') {
+        Ok "database exists: $SqlDatabase"
+    } elseif ($CreateDatabase -and -not $VerifyOnly) {
+        if ($PSCmdlet.ShouldProcess($SqlServer, "create database $SqlDatabase")) {
+            [void](Invoke-SqlCmd -Db 'master' -Query "IF DB_ID('$SqlDatabase') IS NULL CREATE DATABASE [$SqlDatabase];")
+            Ok "database created: $SqlDatabase"
+        }
+    } else {
+        throw "Database '$SqlDatabase' does not exist on $SqlServer. Re-run with -CreateDatabase to create it."
     }
 
     # ── 2. Schema ─────────────────────────────────────────────────────────────
@@ -191,6 +246,10 @@ try {
         $exists = Get-SqlScalar "SET NOCOUNT ON; SELECT CASE WHEN OBJECT_ID('$vw','V') IS NULL THEN 0 ELSE 1 END;"
         if ($exists -eq '1') { Ok "view present: $vw" } else { Bad "view MISSING: $vw" }
     }
+    # The MERGE proc is the last step of every load -- check it here rather than
+    # discovering it is missing after an export has already been paid for.
+    $procExists = Get-SqlScalar "SET NOCOUNT ON; SELECT CASE WHEN OBJECT_ID('archive.usp_MergeStaging','P') IS NULL THEN 0 ELSE 1 END;"
+    if ($procExists -eq '1') { Ok 'procedure present: archive.usp_MergeStaging' } else { Bad 'procedure MISSING: archive.usp_MergeStaging' }
 
     # ── Verification (shared by -VerifyOnly and the post-load pass) ───────────
     function Invoke-IndexVerification {
