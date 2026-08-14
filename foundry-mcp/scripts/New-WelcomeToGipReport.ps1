@@ -31,7 +31,7 @@ param(
     [string]   $OutFile
 )
 
-$version = '1.0.0'
+$version = '1.1.0'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -226,6 +226,21 @@ ORDER BY ReceivedUtc ASC;
   footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);font-size:.76rem;color:var(--muted)}
   footer code{font-family:var(--mono);font-size:.9em;color:var(--ink)}
   @media print{.wrap{background:#fff;padding:0}.sheet{box-shadow:none;border:none;max-width:none}}
+/* theme-toggle:start */
+  .theme-toggle{position:fixed;top:14px;right:14px;z-index:50;width:38px;height:38px;border-radius:50%;
+    border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer;
+    box-shadow:var(--shadow);display:grid;place-items:center;font-size:.95rem;line-height:1;padding:0}
+  .theme-toggle:hover{border-color:var(--accent);color:var(--accent)}
+  .theme-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .theme-toggle .ti-moon{display:none}
+  :root[data-theme="dark"] .theme-toggle .ti-moon{display:inline}
+  :root[data-theme="dark"] .theme-toggle .ti-sun{display:none}
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]) .theme-toggle .ti-moon{display:inline}
+    :root:not([data-theme="light"]) .theme-toggle .ti-sun{display:none}
+  }
+  @media print{.theme-toggle{display:none}}
+/* theme-toggle:end */
 </style>
 <div class="wrap">
   <article class="sheet">
@@ -273,6 +288,24 @@ $senderChips
     </footer>
   </article>
 </div>
+<!-- theme-toggle:start -->
+<button class="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle light / dark"><span class="ti-sun">&#9788;</span><span class="ti-moon">&#9789;</span></button>
+<script>
+(function(){
+  var KEY='gip-theme', root=document.documentElement;
+  try{ var saved=localStorage.getItem(KEY); if(saved){ root.setAttribute('data-theme',saved); } }catch(e){}
+  var btn=document.querySelector('.theme-toggle');
+  if(!btn){ return; }
+  btn.addEventListener('click',function(){
+    var sysDark=window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches;
+    var current=root.getAttribute('data-theme')||(sysDark?'dark':'light');
+    var next=current==='dark'?'light':'dark';
+    root.setAttribute('data-theme',next);
+    try{ localStorage.setItem(KEY,next); }catch(e){}
+  });
+})();
+</script>
+<!-- theme-toggle:end -->
 </body>
 </html>
 "@

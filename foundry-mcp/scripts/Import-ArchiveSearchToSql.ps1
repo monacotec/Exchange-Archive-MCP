@@ -88,13 +88,16 @@ param(
     [string] $CaseName       = 'Archive Index Loader',
 
     [int]    $ExportItemLimit = 500,
+    # Per-attempt wait for an eDiscovery estimate. On timeout the loader waits
+    # a second budget on the SAME run before giving up on that window.
+    [int]    $EstimateBudgetSeconds = 300,
     [switch] $CreateDatabase,
     [switch] $SchemaOnly,
     [switch] $VerifyOnly,
     [switch] $KeepSearches
 )
 
-$version = '1.3.2'
+$version = '1.4.0'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -507,8 +510,13 @@ try {
         }
         return $s.id
     }
-    function Get-Estimate([string]$SearchId, [int]$BudgetSeconds = 300) {
+    # Start and WAIT are separate on purpose: a timeout must be able to keep
+    # waiting on the estimate already running, not POST estimateStatistics again
+    # (which restarts the clock and never converges on a slow window).
+    function Start-EstimateRun([string]$SearchId) {
         [void](Invoke-Graph POST "$CASES/$caseId/searches/$SearchId/estimateStatistics" $null)
+    }
+    function Wait-Estimate([string]$SearchId, [int]$BudgetSeconds) {
         $waited = 0
         while ($true) {
             $s = Invoke-Graph GET "$CASES/$caseId/searches/$SearchId`?`$expand=lastEstimateStatisticsOperation"
@@ -521,6 +529,18 @@ try {
             if ($waited -ge $BudgetSeconds) { return @{ Status = 'timeout'; Count = -1; Size = 0 } }
             Start-Sleep -Seconds 10; $waited += 10
         }
+    }
+    function Get-Estimate([string]$SearchId, [int]$BudgetSeconds = $EstimateBudgetSeconds) {
+        Start-EstimateRun $SearchId
+        $est = Wait-Estimate $SearchId $BudgetSeconds
+        if ($est.Status -eq 'timeout') {
+            # Keep waiting on the SAME run rather than giving up: big windows on
+            # a busy service routinely exceed the first budget (2026-08-14, a
+            # 1037-match window timed out and lost the whole plan).
+            Info "  estimate still running after ${BudgetSeconds}s - waiting up to ${BudgetSeconds}s more (not restarting it)"
+            $est = Wait-Estimate $SearchId $BudgetSeconds
+        }
+        return $est
     }
     function Remove-Search([string]$SearchId) {
         if ($KeepSearches) { return }
@@ -536,25 +556,45 @@ try {
     Info 'each probe runs an eDiscovery estimate (~90-120s) - this is the slow part'
     $plan  = [System.Collections.Generic.List[object]]::new()
     $stack = [System.Collections.Generic.Stack[object]]::new()
-    $stack.Push([PSCustomObject]@{ From = $StartDate.Date; To = $EndDate.Date })
-    $probes = 0
+    # KnownCount carries a count we can infer without paying for a probe.
+    $stack.Push([PSCustomObject]@{ From = $StartDate.Date; To = $EndDate.Date; KnownCount = -1 })
+    $probes  = 0
+    $skipped = 0
 
     while ($stack.Count -gt 0) {
         $w = $stack.Pop()
-        $probes++
-        $kql = Get-KqlForWindow $w.From $w.To
-        $sid = New-Search $kql
-        $est = Get-Estimate $sid
         $label = "{0}..{1}" -f $w.From.ToString('yyyy-MM-dd'), $w.To.ToString('yyyy-MM-dd')
 
+        # A window we already know exceeds the ceiling only needs splitting, and
+        # splitting needs no search and no estimate -- skip straight to it.
+        if ($w.KnownCount -gt $ExportItemLimit) {
+            $est = @{ Status = 'succeeded'; Count = $w.KnownCount; Size = 0 }
+            $sid = $null
+            Info "window $label : $($w.KnownCount) matches (inherited from its sibling - probe skipped)"
+        } else {
+            $probes++
+            $kql = Get-KqlForWindow $w.From $w.To
+            $sid = New-Search $kql
+            $est = Get-Estimate $sid
+        }
+
         if ($est.Status -ne 'succeeded') {
-            Bad "window $label estimate $($est.Status) - skipped (re-run to retry this window)"
-            Remove-Search $sid
+            Bad "window $label estimate $($est.Status) - skipped (re-run to retry just this window with -StartDate $($w.From.ToString('yyyy-MM-dd')) -EndDate $($w.To.ToString('yyyy-MM-dd')))"
+            if ($sid) { Remove-Search $sid }
+            $skipped++
             continue
         }
         if ($est.Count -eq 0) {
             Note "  window $label : 0 matches (skip)"
-            Remove-Search $sid
+            if ($sid) { Remove-Search $sid }
+            # Everything the parent held must be in the sibling, which is the
+            # next item on the stack -- hand it the count so it never probes.
+            if ($w.PSObject.Properties.Match('ParentCount').Count -gt 0 -and
+                $w.ParentCount -gt 0 -and $stack.Count -gt 0) {
+                $sib = $stack.Pop()
+                $sib | Add-Member -NotePropertyName KnownCount -NotePropertyValue $w.ParentCount -Force
+                $stack.Push($sib)
+            }
             continue
         }
         if ($est.Count -le $ExportItemLimit) {
@@ -563,23 +603,36 @@ try {
             continue
         }
 
-        Remove-Search $sid
+        if ($sid) { Remove-Search $sid }
         $span = ($w.To - $w.From).Days
         if ($span -le 1) {
             Bad "window $label has $($est.Count) matches in <=1 day - cannot split further; export will cap at $ExportItemLimit and this window stays INCOMPLETE"
-            $sid2 = New-Search $kql
-            [void]$plan.Add([PSCustomObject]@{ From = $w.From; To = $w.To; Count = $est.Count; SearchId = $sid2; Kql = $kql })
+            $kql2 = Get-KqlForWindow $w.From $w.To
+            $sid2 = New-Search $kql2
+            [void]$plan.Add([PSCustomObject]@{ From = $w.From; To = $w.To; Count = $est.Count; SearchId = $sid2; Kql = $kql2 })
             continue
         }
         $mid = $w.From.AddDays([Math]::Floor($span / 2))
         Info "window $label : $($est.Count) matches > ceiling - splitting at $($mid.ToString('yyyy-MM-dd'))"
-        $stack.Push([PSCustomObject]@{ From = $mid.AddDays(1); To = $w.To })
-        $stack.Push([PSCustomObject]@{ From = $w.From;         To = $mid })
+        # Push right first so the LEFT half pops next; if the left turns out
+        # empty it hands its ParentCount to the right half sitting beneath it.
+        $stack.Push([PSCustomObject]@{ From = $mid.AddDays(1); To = $w.To;  KnownCount = -1; ParentCount = $est.Count })
+        $stack.Push([PSCustomObject]@{ From = $w.From;         To = $mid;   KnownCount = -1; ParentCount = $est.Count })
     }
 
-    $plannedTotal = ($plan | Measure-Object -Property Count -Sum).Sum
+    # Measure-Object returns NOTHING for an empty pipeline, so .Sum throws under
+    # StrictMode -- which is exactly how a fully-skipped plan crashed the run
+    # instead of reporting itself (2026-08-14).
+    $plannedTotal = 0
+    if ($plan.Count -gt 0) { $plannedTotal = ($plan | Measure-Object -Property Count -Sum).Sum }
     Ok "plan: $($plan.Count) window(s), $plannedTotal matches, after $probes probe(s)"
-    if ($plan.Count -eq 0) { throw 'No exportable windows -- nothing matched the query in the given range.' }
+    if ($plan.Count -eq 0) {
+        if ($skipped -gt 0) {
+            throw "No exportable windows: $skipped window(s) failed their estimate (see above). The searches are transient -- just re-run; the eDiscovery service is usually faster on a second attempt."
+        }
+        throw "No exportable windows -- nothing matched '$Query' between $($StartDate.ToString('yyyy-MM-dd')) and $($EndDate.ToString('yyyy-MM-dd'))."
+    }
+    if ($skipped -gt 0) { Info "$skipped window(s) were skipped after estimate failures - re-run to pick them up (already-loaded windows will simply update)" }
 
     # ── 6. Export, parse, load each window ───────────────────────────────────
     Step '6. Export, parse and load'

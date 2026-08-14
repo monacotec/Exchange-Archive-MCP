@@ -25,6 +25,7 @@ are now **redirect stubs** pointing here — record version bumps in this file.
 | `.env.example` | 1.0.0 | Template for the root `.env` (archive-index SQL target); real `.env` is gitignored |
 | `scripts/Test-VersionManifest.ps1` | 1.1.0 | Verifies this manifest against every file's own version anchor; reports drift, missing and unlisted files. Exits 1 so it can gate a release |
 | `docs/build-briefs-pdf.ps1` | 1.0.0 | Renders the HTML briefs to PDF |
+| `docs/Add-ThemeToggle.ps1` | 1.0.0 | Injects the persisted light/dark toggle into every HTML report; idempotent |
 
 ---
 
@@ -67,7 +68,7 @@ Release: bump the file's internal version header → update its row here → tag
 | `infra/modules/sqlhost.bicep` | 1.0.0 | Shared Azure SQL logical server for MCP data stores: Entra-only auth, always-on tier (no serverless auto-pause), databases as an array (one per MCP), firewall allowlist. Deployed independently of azd |
 | `scripts/Initialize-McpSqlHost.ps1` | 1.3.0 | Provision/verify the shared SQL host: deploy bicep, verify server+DBs via ARM, grant contained users (Function App MI + access group) by SID, prove connectivity. `-AddDatabase` for the next MCP; `-VerifyOnly` |
 | `sql/archive-index-schema.sql` | 1.0.0 | Archive message index: LoadRun provenance, Message + staging, classification/coverage/mojibake views, MERGE proc. Idempotent per statement; indexes guarded individually |
-| `scripts/Import-ArchiveSearchToSql.ps1` | 1.3.2 | eDiscovery -> SQL loader/verifier: auto-bisects date windows past the 500-item export ceiling (no 100/call cap — reads the report CSV), UTF-8-BOM staging load, MERGE dedupe by internet message id, `-VerifyOnly`. 1.1.1: all SQL routed through UTF-8-BOM `-i` files — a KQL double quote broke `-Q` argument parsing. 1.1.0: `-CreateDatabase`, LocalDB pre-start + startup-transient retry, MERGE-proc presence check |
+| `scripts/Import-ArchiveSearchToSql.ps1` | 1.4.0 | eDiscovery -> SQL loader/verifier: auto-bisects date windows past the 500-item export ceiling (no 100/call cap — reads the report CSV), UTF-8-BOM staging load, MERGE dedupe by internet message id, `-VerifyOnly`. 1.1.1: all SQL routed through UTF-8-BOM `-i` files — a KQL double quote broke `-Q` argument parsing. 1.1.0: `-CreateDatabase`, LocalDB pre-start + startup-transient retry, MERGE-proc presence check |
 | `scripts/Set-McpAlwaysReady.ps1` | 1.1.0 | Diagnose/fix idle drop-offs: timed PRM probes + Flex alwaysReady http=1 (-Apply, full functionAppConfig round-trip — sparse PATCH fails ARM validation); scale-to-zero cold starts break the MCP client's connect timeout |
 | `scripts/Enable-McpAccessRequests.ps1` | 1.1.2 | Group-based access (SG-Exchange-Archive-MCP-Users): create/seed group, assign to app, optional per-user cleanup; scripted Identity Governance access package (My Access request + approval) — the enterprise-app Self-service blade doesn't exist for custom OIDC apps. APPLIED 2026-08-11 (group/members/assignment/catalog/package/roleScope) |
 | `scripts/Initialize-EDiscoveryAccess.ps1` | 1.0.2 | E0 prereqs: Graph app roles, Purview SP + eDiscovery Manager, standing case (PS 5.1) |
@@ -81,7 +82,7 @@ Release: bump the file's internal version header → update its row here → tag
 | `scripts/Get-ArchiveConfig.ps1` | 1.0.0 | PS 5.1 EXO archive config read (AutoExpandingArchiveEnabled) |
 | `scripts/Initialize-ArtifactSigning.ps1` | 1.2.0 | Provisions Artifact Signing (account, roles, cert profile); post-rename role names + live token probe |
 | `scripts/Export-AzureInventory.ps1` | 1.0.0 | Read-only Azure/Entra config snapshot → foundry-mcp/inventory/ |
-| `scripts/New-WelcomeToGipReport.ps1` | 1.0.0 | Renders the "Welcome to GI Partners" new-hire report from archive.vMessageSignal (metadata only) |
+| `scripts/New-WelcomeToGipReport.ps1` | 1.1.0 | Renders the "Welcome to GI Partners" new-hire report from archive.vMessageSignal (metadata only) |
 | `scripts/Open-ArchiveMessage.ps1` | 1.0.0 | Opens an archive message in classic Outlook by Message-ID (giparchive handler back-end) |
 | `scripts/Register-GIArchiveProtocol.ps1` | 2.0.0 | Registers the giparchive: URL protocol handler |
 | `README.md` | rev 2 | Pre-hardening draft; rewritten in FOUNDRY-MCP-PLAN Phase 5 |
