@@ -22,14 +22,25 @@
     -VerifyOnly checks everything and mutates nothing (exit 1 on problems).
     -AddDatabase adds another database to the existing server for the next MCP.
 
+    RUNNING THIS AGAINST A HAND-CREATED SERVER: the deployment is declarative,
+    so it CONVERGES the server to this template -- it will turn Entra-only auth
+    ON, set the Entra admin to the resolved principal, and align each listed
+    database to -Sku/-Tier/-Capacity. If the server was set up by hand with
+    different settings, run -VerifyOnly FIRST and read the inventory before
+    letting the deployment reshape it.
+
     COST: the default Standard S0 tier bills continuously (it is always-on by
     design -- serverless auto-pause would reintroduce the resume delay this
     host exists to avoid). Confirm current pricing in the portal before the
     first run; change with -Sku/-Tier/-Capacity.
 
 .EXAMPLE
+    # Inventory an existing server without touching it (do this first)
+    .\Initialize-McpSqlHost.ps1 -VerifyOnly
+
+.EXAMPLE
     # First run (admin defaults to the signed-in user)
-    .\Initialize-McpSqlHost.ps1 -ServerName sql-gipartners-mcp
+    .\Initialize-McpSqlHost.ps1
 
 .EXAMPLE
     # Preferred: an Entra GROUP owns the server, so ownership outlives any person
@@ -44,7 +55,7 @@
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [Parameter(Mandatory)][string] $ServerName,
+    [string]   $ServerName     = 'gip-mcp-hub-sql',
     [string]   $ResourceGroup  = 'finresgroup',
     [string]   $SubscriptionId = 'db17a4a4-f677-498a-b4a2-eb401ba9cf29',
     [string]   $TenantId       = '9c1b0b26-717a-4eda-9d7e-7eebc00066bf',
@@ -68,7 +79,7 @@ param(
     [switch]   $VerifyOnly
 )
 
-$version = '1.0.0'
+$version = '1.1.0'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
