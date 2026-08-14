@@ -72,11 +72,11 @@ param(
     # then to LocalDB for a workstation-local index.
     [string] $SqlServer,
     [string] $SqlDatabase,
-    # Integrated = Windows auth (LocalDB / on-prem). Entra = Azure SQL: without
-    # -SqlUser it tries Entra Integrated (Entra-joined machines); with -SqlUser
-    # it prompts interactively for that account.
+    # Integrated = Windows auth via sqlcmd (LocalDB / on-prem).
+    # Entra      = Azure SQL via System.Data.SqlClient with an access token from
+    #              the Azure CLI session -- no browser prompt, and independent of
+    #              domain/hybrid join or tenant federation.
     [ValidateSet('Integrated', 'Entra')][string] $SqlAuth = 'Integrated',
-    [string] $SqlUser,
 
     # Azure / eDiscovery
     [string] $SubscriptionId = 'db17a4a4-f677-498a-b4a2-eb401ba9cf29',
@@ -94,7 +94,7 @@ param(
     [switch] $KeepSearches
 )
 
-$version = '1.2.0'
+$version = '1.3.0'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -172,7 +172,68 @@ try {
     $schemaFile = Join-Path $PSScriptRoot '..\sql\archive-index-schema.sql'
     if (-not (Test-Path $schemaFile)) { throw "Schema file not found: $schemaFile" }
 
-    # ── sqlcmd wrapper ────────────────────────────────────────────────────────
+    # ── Azure SQL executor (token auth via System.Data.SqlClient) ─────────────
+    $script:SqlAccessToken = $null
+    function Get-SqlAccessToken {
+        if (-not $script:SqlAccessToken) {
+            $script:SqlAccessToken = az account get-access-token --resource 'https://database.windows.net/' --query accessToken -o tsv 2>$null
+            if ($LASTEXITCODE -ne 0 -or -not $script:SqlAccessToken) {
+                throw 'Could not obtain an Azure SQL access token from the az session (run az login and retry).'
+            }
+        }
+        return $script:SqlAccessToken
+    }
+
+    # Azure SQL transient fault numbers: connection reset / throttling / failover
+    # / serverless resume. Worth retrying; anything else is a real error.
+    $script:SqlTransient = @(4060, 40197, 40501, 40613, 49918, 49919, 49920, 10928, 10929, 10053, 10054, 10060, 233, 64, 20)
+
+    function Invoke-SqlViaToken {
+        param([Parameter(Mandatory)][string]$Sql, [string]$Db, [int]$MaxAttempts = 4)
+        if (-not $Db) { $Db = $SqlDatabase }
+        for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+            try { return Invoke-SqlViaTokenOnce -Sql $Sql -Db $Db }
+            catch [System.Data.SqlClient.SqlException] {
+                $num = $_.Exception.Number
+                if ($attempt -ge $MaxAttempts -or $num -notin $script:SqlTransient) { throw }
+                $wait = 5 * $attempt
+                Info "transient SQL error $num (attempt $attempt/$MaxAttempts) - retrying in ${wait}s..."
+                Start-Sleep -Seconds $wait
+            }
+        }
+    }
+
+    function Invoke-SqlViaTokenOnce {
+        param([Parameter(Mandatory)][string]$Sql, [string]$Db)
+        $conn = [System.Data.SqlClient.SqlConnection]::new(
+            "Server=tcp:$SqlServer,1433;Initial Catalog=$Db;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;")
+        $conn.AccessToken = Get-SqlAccessToken
+        $out = [System.Collections.Generic.List[string]]::new()
+        try {
+            $conn.Open()
+            # GO is a sqlcmd batch separator, not T-SQL -- split it out here.
+            foreach ($batch in ($Sql -split '(?im)^\s*GO\s*$')) {
+                if (-not $batch.Trim()) { continue }
+                $cmd = $conn.CreateCommand()
+                $cmd.CommandText = $batch
+                $cmd.CommandTimeout = 300   # bulk staging inserts can be chunky
+                $reader = $cmd.ExecuteReader()
+                try {
+                    do {
+                        while ($reader.Read()) {
+                            $vals = for ($i = 0; $i -lt $reader.FieldCount; $i++) {
+                                if ($reader.IsDBNull($i)) { '' } else { [string]$reader.GetValue($i) }
+                            }
+                            [void]$out.Add(($vals -join '  '))
+                        }
+                    } while ($reader.NextResult())
+                } finally { $reader.Close(); $cmd.Dispose() }
+            }
+            return ($out -join "`n").Trim()
+        } finally { $conn.Dispose() }
+    }
+
+    # ── sqlcmd wrapper (Integrated auth: LocalDB / on-prem) ───────────────────
     # -I: QUOTED_IDENTIFIER ON (the OFF default breaks filtered indexes, err 1934)
     # -b: non-zero exit on SQL error, so failures actually fail
     # Azure SQL serverless: the FIRST connection to a paused database triggers
@@ -187,6 +248,18 @@ try {
             [int]$MaxAttempts = 5
         )
         if (-not $Db) { $Db = $SqlDatabase }
+
+        # Azure SQL: connect with an ACCESS TOKEN, not sqlcmd -G. With ODBC 17,
+        # -G alone means ActiveDirectoryIntegrated, which needs a FEDERATED
+        # tenant (AD FS/WS-Trust) -- hybrid Entra join is not enough, and it
+        # fails 0xCAA9001F "supported only in federation flow" (2026-08-14).
+        # -G -U would prompt a browser on every invocation. A bearer token from
+        # the az session works regardless of join or federation state, needs no
+        # extra modules, and keeps SQL text out of any shell.
+        if ($SqlAuth -eq 'Entra') {
+            $sqlText = if ($InputFile) { Get-Content -LiteralPath $InputFile -Raw } else { $Query }
+            return Invoke-SqlViaToken -Sql $sqlText -Db $Db
+        }
 
         # NEVER pass SQL through -Q. Any embedded double quote -- and KQL like
         # subject:"First Day at GI Partners" is full of them -- terminates the
@@ -204,12 +277,7 @@ try {
         }
 
         $argsBase = @('-S', $SqlServer, '-d', $Db, '-I', '-b', '-i', $InputFile)
-        if ($SqlAuth -eq 'Entra') {
-            $argsBase += '-G'
-            if ($SqlUser) { $argsBase += @('-U', $SqlUser) }
-        } else {
-            $argsBase += '-E'
-        }
+        $argsBase += '-E'
         if ($Scalar) { $argsBase += @('-h', '-1', '-W') }
 
         try {

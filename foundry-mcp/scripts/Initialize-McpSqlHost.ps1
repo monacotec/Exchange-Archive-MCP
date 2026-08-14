@@ -81,7 +81,7 @@ param(
     [switch]   $VerifyOnly
 )
 
-$version = '1.2.0'
+$version = '1.3.0'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -256,16 +256,45 @@ try {
         } else { Info "reader group '$ReaderGroup' not found - skipping" }
     }
 
+    # Connect with an ACCESS TOKEN from the az session, not sqlcmd -G.
+    # sqlcmd 15 / ODBC 17 with -G alone means ActiveDirectoryIntegrated, which
+    # requires a federated or Entra-joined machine; on this AD-domain-joined
+    # workstation it fails with 0xCAA9001F "Integrated Windows authentication
+    # supported only in federation flow" (seen 2026-08-14). -G -U would prompt
+    # a browser per invocation. System.Data.SqlClient accepts a bearer token
+    # directly, so the az session already validated in step 1 carries through
+    # with no prompts and no extra modules. Bonus: parameter-free SQL never
+    # touches a shell, so the quoting and codepage hazards vanish outright.
+    $script:SqlAccessToken = $null
+    function Get-SqlAccessToken {
+        if (-not $script:SqlAccessToken) {
+            $script:SqlAccessToken = az account get-access-token --resource 'https://database.windows.net/' --query accessToken -o tsv 2>$null
+            if ($LASTEXITCODE -ne 0 -or -not $script:SqlAccessToken) {
+                throw 'Could not obtain an Azure SQL access token from the az session.'
+            }
+        }
+        return $script:SqlAccessToken
+    }
+
     function Invoke-DbSql([string]$Database, [string]$Sql) {
-        # Entra auth: -G. Files, never -Q: SQL text carries quotes and sqlcmd
-        # argument parsing mangles them. UTF-8 BOM so non-ASCII survives.
-        $f = Join-Path $env:TEMP ("sqlhost-{0}.sql" -f (New-Guid).Guid.Substring(0, 8))
+        $conn = [System.Data.SqlClient.SqlConnection]::new(
+            "Server=tcp:$fqdn,1433;Initial Catalog=$Database;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;")
+        $conn.AccessToken = Get-SqlAccessToken
         try {
-            Set-Content -LiteralPath $f -Value $Sql -Encoding utf8BOM
-            $out = & sqlcmd -S $fqdn -d $Database -G -I -b -h -1 -W -i $f 2>&1
-            if ($LASTEXITCODE -ne 0) { throw (($out | Out-String).Trim()) }
-            return (($out | Out-String).Trim())
-        } finally { Remove-Item $f -Force -ErrorAction SilentlyContinue }
+            $conn.Open()
+            $results = [System.Collections.Generic.List[string]]::new()
+            # GO is a sqlcmd batch separator, not T-SQL -- split on it ourselves.
+            foreach ($batch in ($Sql -split '(?im)^\s*GO\s*$')) {
+                if (-not $batch.Trim()) { continue }
+                $cmd = $conn.CreateCommand()
+                $cmd.CommandText = $batch
+                $cmd.CommandTimeout = 120
+                $r = $cmd.ExecuteScalar()
+                if ($null -ne $r) { [void]$results.Add([string]$r) }
+                $cmd.Dispose()
+            }
+            return ($results -join "`n").Trim()
+        } finally { $conn.Dispose() }
     }
 
     foreach ($db in $dbList) {
