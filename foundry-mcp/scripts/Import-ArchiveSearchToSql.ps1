@@ -90,7 +90,7 @@ param(
     [switch] $KeepSearches
 )
 
-$version = '1.1.0'
+$version = '1.1.1'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -172,40 +172,53 @@ try {
             [int]$MaxAttempts = 5
         )
         if (-not $Db) { $Db = $SqlDatabase }
-        $argsBase = @('-S', $SqlServer, '-d', $Db, '-I', '-b')
-        if ($SqlAuth -eq 'Entra') { $argsBase += '-G' } else { $argsBase += '-E' }
-        if ($Scalar) { $argsBase += @('-h', '-1', '-W') }
-        if ($InputFile) {
-            $argsBase += @('-i', $InputFile)
-        } else {
-            # -Q takes ONE argument: flatten to a single line so multi-statement
-            # queries pass intact. (Safe here because no query uses '--'
-            # comments, which would swallow the rest of the line.)
-            $argsBase += @('-Q', ($Query -replace '\r?\n', ' '))
+
+        # NEVER pass SQL through -Q. Any embedded double quote -- and KQL like
+        # subject:"First Day at GI Partners" is full of them -- terminates the
+        # Win32 argument string, so sqlcmd receives stray arguments and exits 1
+        # ("Unexpected argument", hit live 2026-08-14). Writing the batch to a
+        # file and using -i removes shell quoting from the picture entirely, and
+        # the file needs its UTF-8 BOM regardless: classic sqlcmd reads input
+        # files in the ANSI codepage without one and silently mojibakes every
+        # em-dash and curly quote.
+        $tempQueryFile = $null
+        if (-not $InputFile) {
+            $tempQueryFile = Join-Path $env:TEMP ("arcidx-q-{0}.sql" -f (New-Guid).Guid.Substring(0, 8))
+            Set-Content -LiteralPath $tempQueryFile -Value $Query -Encoding utf8BOM
+            $InputFile = $tempQueryFile
         }
 
-        for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-            $out = & sqlcmd @argsBase 2>&1
-            $text = ($out | Out-String).Trim()
-            if ($LASTEXITCODE -eq 0) { return $text }
-            if ($text -match '40613|not currently available|is paused') {
-                Info "database waking (attempt $attempt/$MaxAttempts) - retrying in 30s..."
-                Start-Sleep -Seconds 30
-                continue
+        $argsBase = @('-S', $SqlServer, '-d', $Db, '-I', '-b', '-i', $InputFile)
+        if ($SqlAuth -eq 'Entra') { $argsBase += '-G' } else { $argsBase += '-E' }
+        if ($Scalar) { $argsBase += @('-h', '-1', '-W') }
+
+        try {
+            for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+                $out = & sqlcmd @argsBase 2>&1
+                $text = ($out | Out-String).Trim()
+                if ($LASTEXITCODE -eq 0) { return $text }
+                if ($text -match '40613|not currently available|is paused') {
+                    Info "database waking (attempt $attempt/$MaxAttempts) - retrying in 30s..."
+                    Start-Sleep -Seconds 30
+                    continue
+                }
+                # LocalDB automatic instances stop when idle and are re-created on
+                # demand; a connection landing mid-start fails with a spurious
+                # 'Login failed' / 'Cannot open database'. Short, targeted retry --
+                # a genuine permission problem still surfaces after these.
+                if ($isLocalDb -and $attempt -lt $MaxAttempts -and
+                    $text -match 'Login failed for user|Cannot open database|error occurred while establishing') {
+                    Info "LocalDB instance still starting (attempt $attempt/$MaxAttempts) - retrying in 3s..."
+                    Start-Sleep -Seconds 3
+                    continue
+                }
+                throw "sqlcmd failed (exit $LASTEXITCODE): $text"
             }
-            # LocalDB automatic instances stop when idle and are re-created on
-            # demand; a connection landing mid-start fails with a spurious
-            # 'Login failed' / 'Cannot open database'. Short, targeted retry --
-            # a genuine permission problem still surfaces after these.
-            if ($isLocalDb -and $attempt -lt $MaxAttempts -and
-                $text -match 'Login failed for user|Cannot open database|error occurred while establishing') {
-                Info "LocalDB instance still starting (attempt $attempt/$MaxAttempts) - retrying in 3s..."
-                Start-Sleep -Seconds 3
-                continue
-            }
-            throw "sqlcmd failed (exit $LASTEXITCODE): $text"
+            throw "sqlcmd could not reach $SqlDatabase after $MaxAttempts attempts (serverless wake-up window exceeded)."
         }
-        throw "sqlcmd could not reach $SqlDatabase after $MaxAttempts attempts (serverless wake-up window exceeded)."
+        finally {
+            if ($tempQueryFile) { Remove-Item $tempQueryFile -Force -ErrorAction SilentlyContinue }
+        }
     }
 
     function Get-SqlScalar([string]$Q) {
