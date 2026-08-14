@@ -1,7 +1,7 @@
 """
 foundry-mcp/function_app.py
 Exchange Online Archive MCP Server — Azure Functions Python v2 model
-Version: 3.6.1
+Version: 3.7.0
 
 Rewritten 2026-07-13 on the Azure-Samples/remote-mcp-functions-python (GA extension)
 pattern, replacing the rev-1 draft. Key changes:
@@ -23,6 +23,14 @@ Tools (all read-only, all scoped to the signed-in user):
   - get_mail_by_date_range   : per-folder receivedDateTime $filter fan-out
   - list_archive_folders     : Online Archive folder hierarchy
 
+v3.7.0 (2026-08-14): LONG-POLL the async legs server-side (estimate ~90s,
+export ~90s, both in 5s internal steps) instead of returning fast and making
+the client re-poll every ~20-30s. Azure's front end kills idle connections at
+~230s; rapid client-side polling plus user think-time created idle gaps that
+dropped the MCP session mid-conversation ("Tool not found", 2026-08-14
+diagnosis bundle). Holding the request keeps traffic flowing and collapses
+most searches into one or two calls. Flex allows long executions; each held
+call still polls Graph in short 5s requests internally.
 v3.6.1 (2026-08-11): audit records now embed their payload in the trace message
 (JSON after the 'mcp_tool_call ' prefix). The previous custom_dimensions extra=
 was dropped by the built-in Functions telemetry (needs OpenCensus), leaving
@@ -251,7 +259,7 @@ def _is_archive_unaddressable(ex: Exception) -> bool:
 
 
 async def _ediscovery_estimate(session, caller: dict, kql: str) -> dict:
-    """Create a caller-scoped eDiscovery search, start its estimate, poll briefly.
+    """Create a caller-scoped eDiscovery search, start its estimate, long-poll.
 
     If the estimate finishes in-call, PREWARM the export immediately so the
     ~50s report generation overlaps the caller's move to archive_get_search_results.
@@ -260,7 +268,10 @@ async def _ediscovery_estimate(session, caller: dict, kql: str) -> dict:
     client = ediscovery.EDiscoveryClient(session, token, caller)
     search_id = await client.create_search(kql)
     await client.start_estimate(search_id)
-    est = await client.poll_estimate(search_id, budget_seconds=40)
+    # Long-poll (v3.7.0): most single-mailbox estimates finish inside ~90s, so
+    # the initial search call usually returns final counts in one round trip
+    # instead of bouncing the client to archive_get_search_status.
+    est = await client.poll_estimate(search_id, budget_seconds=90)
     est["search_id"] = search_id
     if est["status"] == "succeeded" and 0 < est["count"] <= ediscovery.EXPORT_ITEM_LIMIT:
         try:
@@ -277,12 +288,13 @@ def _ediscovery_response(tool: str, caller: dict, params: dict, kql: str, est: d
             "For the actual messages (subject/sender/date/folder + open_url and "
             "open_desktop_url jump links), call archive_get_search_results with this "
             "search_id" + (f" AND export_operation_id={export_op}" if export_op else "") +
-            ". It returns fast; if still generating, keep calling with the "
-            "export_operation_id until status is 'complete' (usually under a minute).")
+            ". That tool waits server-side while the report generates, so one "
+            "call usually returns the finished items.")
     if est["status"] == "running":
-        note = ("The estimate is still running - call archive_get_search_status with "
-                "this search_id until it reports 'succeeded', then call "
-                "archive_get_search_results.")
+        note = ("The estimate is still running after a 90s server-side wait - call "
+                "archive_get_search_status with this search_id (it also waits "
+                "server-side; call it immediately, no client-side delay) until it "
+                "reports 'succeeded', then call archive_get_search_results.")
     resp = {
         "data_path": "ediscovery",
         "kql": kql,
@@ -694,7 +706,10 @@ async def archive_get_search_status(context: MCPToolContext, search_id: str) -> 
         ) as session:
             token = await _app_graph_token()
             client = ediscovery.EDiscoveryClient(session, token, caller)
-            est = await client.poll_estimate(search_id, budget_seconds=30)
+            # Long-poll (v3.7.0): hold the request while the estimate runs so the
+            # MCP connection carries traffic instead of idling between client
+            # polls (front-end kills idle connections at ~230s).
+            est = await client.poll_estimate(search_id, budget_seconds=90)
             # Prewarm the export the moment the estimate succeeds, so it generates
             # in the background before archive_get_search_results is called.
             export_op = ""
@@ -705,7 +720,9 @@ async def archive_get_search_status(context: MCPToolContext, search_id: str) -> 
                     logger.warning("prewarm export failed for %s: %s", search_id, ex)
         _audit("archive_get_search_status", caller, {"search_id": search_id, "data_path": "ediscovery"}, est["status"], est["count"])
         if est["status"] == "running":
-            note = "Still running - poll again in ~30 seconds."
+            note = ("Still running after a 90s server-side wait - call this tool "
+                    "again IMMEDIATELY (it waits on the server; no client-side "
+                    "delay needed).")
         elif export_op:
             note = (f"Report export already started (export_operation_id={export_op}). "
                     "Call archive_get_search_results with this search_id AND that "
@@ -733,7 +750,7 @@ async def archive_get_search_status(context: MCPToolContext, search_id: str) -> 
 @app.mcp_tool_property(arg_name="export_operation_id", description="Operation id returned by a previous archive_get_search_results call whose report was still generating. Omit on the first call.", is_required=False)
 @app.mcp_tool_property(arg_name="top", description="Maximum items to return (1-100, default 20).", is_required=False)
 async def archive_get_search_results(context: MCPToolContext, search_id: str, export_operation_id: str = "", top: str = "20") -> str:
-    """Retrieve per-item metadata for a completed eDiscovery archive search: subject, sender, date, archive folder, internet_message_id, plus open_desktop_url (opens the message in classic Outlook via the giparchive handler — the reliable path for archive messages) and open_url (Outlook on the web — best-effort; often fails for archive items). Present open_desktop_url and internet_message_id per message. The eDiscovery report export is asynchronous (~up to a minute), so this tool returns FAST and is poll-based: if status is 'report_generating' it returns an export_operation_id — call this tool again with BOTH search_id and that export_operation_id every ~20 seconds until status is 'complete'. This is expected, not an error; do not give up after the first call. Pass the export_operation_id from search_archive_mail / archive_get_search_status when present to skip straight ahead."""
+    """Retrieve per-item metadata for a completed eDiscovery archive search: subject, sender, date, archive folder, internet_message_id, plus open_desktop_url (opens the message in classic Outlook via the giparchive handler — the reliable path for archive messages) and open_url (Outlook on the web — best-effort; often fails for archive items). Present open_desktop_url and internet_message_id per message. The eDiscovery report export is asynchronous; this tool WAITS server-side (up to ~90s) while the report generates, so most calls return the finished items in one shot. If status is still 'report_generating', call again IMMEDIATELY with BOTH search_id and the returned export_operation_id — do not add client-side delays. Pass the export_operation_id from search_archive_mail / archive_get_search_status when present to skip straight ahead."""
     caller = {}
     try:
         caller = _get_caller(context)
@@ -770,11 +787,13 @@ async def archive_get_search_results(context: MCPToolContext, search_id: str, ex
 
             # Resume the passed export, else reuse the prewarmed one (or start it).
             # ensure_export dedupes so status-prewarm and this call share one export.
-            # Poll only briefly in-call so the tool returns FAST and never blocks
-            # the MCP client — the caller polls by calling again with export_operation_id.
+            # Long-poll (v3.7.0): hold the request while the report generates —
+            # rapid client-side re-polling left the MCP connection idle during
+            # user think-time and the front end kills idle connections at ~230s.
+            # Internally this is still a 5s Graph poll loop, not one long request.
             op_id = export_operation_id or await client.ensure_export(search_id)
             waited = 0
-            poll_budget = 15
+            poll_budget = 90
             while True:
                 op = await client.get_operation(op_id)
                 op_status = (op.get("status") or "notStarted").lower()
@@ -792,10 +811,11 @@ async def archive_get_search_results(context: MCPToolContext, search_id: str, ex
                         "export_operation_id": op_id,
                         "status": "report_generating",
                         "percent": op.get("percentProgress", 0),
-                        "note": ("Report still generating (this is normal). Call "
+                        "note": ("Report still generating after a 90s server-side "
+                                 "wait (unusual but not an error). Call "
                                  "archive_get_search_results AGAIN with search_id AND "
-                                 f"export_operation_id={op_id} in ~20 seconds. Repeat "
-                                 "until status is 'complete'."),
+                                 f"export_operation_id={op_id} IMMEDIATELY - the tool "
+                                 "waits on the server; no client-side delay needed."),
                     })
                 await asyncio.sleep(5)
                 waited += 5

@@ -31,7 +31,7 @@ Release: bump the file's internal version header → update its row here → tag
 
 | File | Version | Description |
 |------|---------|-------------|
-| `function_app.py` | 3.6.1 | Audit fix: payload embedded in trace message as JSON (custom_dimensions extra= was dropped by built-in Functions telemetry — caller identity never reached Log Analytics; found 2026-08-11 during xtsai error triage). (3.6.0: honest jump-link guidance; 3.5.0: prewarm export on estimate-success) |
+| `function_app.py` | 3.7.0 | Long-poll the async legs server-side (estimate/export ~90s in 5s steps) — rapid client re-polling plus think-time left the MCP connection idle past the front end's ~230s kill, dropping sessions mid-conversation. (3.6.1: audit payload embedded in trace message; 3.6.0: honest jump-link guidance) |
 | `ediscovery.py` | 1.7.0 | ensure_export() dedupe cache (prewarm ↔ results converge on one export); specific download errors; giparchive_url(); one-case-per-caller |
 | `desktop-handler/ArchiveOpen.csproj` | 1.1.0 | .NET 8 self-contained WinExe project for the giparchive: handler |
 | `desktop-handler/Program.cs` | 1.1.0 | Message-ID validation, Outlook COM AdvancedSearch (proptag 0x1035001F) PER-STORE, Display, OWA fallback, logging |
