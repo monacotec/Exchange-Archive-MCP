@@ -35,7 +35,10 @@
 param(
     [string]    $ProjectTagValue = 'Exchange Archive MCP',
     [string]    $TagName         = 'Project',
-    [hashtable] $AdditionalTags  = @{},
+    # Defaults, not opt-in: these are the standing convention, and they must match
+    # what the templates declare (main.bicep tags var, sqlhost.bicep tags default)
+    # or every deployment would strip whichever side is missing them.
+    [hashtable] $AdditionalTags  = @{ Owner = 'IT-Infrastructure'; CostCenter = 'IT-AI' },
     [string]    $ResourceGroup   = 'finresgroup',
     [string]    $SubscriptionId  = 'db17a4a4-f677-498a-b4a2-eb401ba9cf29',
     [string]    $TenantId        = '9c1b0b26-717a-4eda-9d7e-7eebc00066bf',
@@ -46,7 +49,7 @@ param(
     [switch]    $Apply
 )
 
-$version = '1.0.0'
+$version = '1.1.0'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 

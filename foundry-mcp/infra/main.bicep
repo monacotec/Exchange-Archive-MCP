@@ -1,5 +1,5 @@
 // foundry-mcp/infra/main.bicep — azd infrastructure entry point
-// Version: 3.3.0
+// Version: 3.4.0
 //
 // Rev 2026-07-13 (v3): targetScope changed subscription → resourceGroup. Deployment
 // lands in an EXISTING resource group (org convention: finresgroup, alongside the
@@ -39,11 +39,15 @@ param entraClientId string = '9519ca68-dae2-4add-8309-4bdd1fa45e79'
 // Declared here, not only applied by script: ARM REPLACES a resource's tag set
 // on deployment, so anything set out-of-band (Set-ResourceTags.ps1) is wiped by
 // the next provision unless the template asserts it too.
+// Keep in step with Set-ResourceTags.ps1 -- if the two sets diverge, each
+// deployment strips whatever the template omits.
 var tags = {
   Environment: environmentName
   ManagedBy:   'azd'
   Service:     'exchange-archive-mcp'
   Project:     'Exchange Archive MCP'
+  Owner:       'IT-Infrastructure'
+  CostCenter:  'IT-AI'
 }
 
 // Vault names cap at 24 chars and are globally reserved while soft-deleted, so the

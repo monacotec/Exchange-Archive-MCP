@@ -1,5 +1,5 @@
 // sqlhost.bicep — shared Azure SQL logical server for MCP data stores
-// Version: 1.1.0
+// Version: 1.2.0
 //
 // ONE logical server, MANY databases: the archive index today, one database per
 // MCP as they are built. Deployed on its own (Initialize-McpSqlHost.ps1), NOT as
@@ -59,9 +59,11 @@ param allowAzureServices bool = true
 // Initialize-McpSqlHost.ps1, which passes no tags, and an empty object would
 // REPLACE (clear) whatever Set-ResourceTags.ps1 applied out-of-band.
 param tags object = {
-  Project:   'Exchange Archive MCP'
-  ManagedBy: 'bicep'
-  Service:   'mcp-sql-host'
+  Project:    'Exchange Archive MCP'
+  ManagedBy:  'bicep'
+  Service:    'mcp-sql-host'
+  Owner:      'IT-Infrastructure'
+  CostCenter: 'IT-AI'
 }
 
 resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
