@@ -94,7 +94,7 @@ param(
     [switch] $KeepSearches
 )
 
-$version = '1.3.1'
+$version = '1.3.2'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -198,8 +198,16 @@ try {
         if (-not $Database) { $Database = $SqlDatabase }
         for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
             try { return Invoke-SqlViaTokenOnce -Sql $Sql -Database $Database }
-            catch [System.Data.SqlClient.SqlException] {
-                $num = $_.Exception.Number
+            catch {
+                # $conn.Open() throwing a SqlException reaches us wrapped in a
+                # MethodInvocationException: the catch type filter matches on the
+                # INNER exception, but $_.Exception is the wrapper, which has no
+                # .Number -- reading it blind throws under StrictMode and turns a
+                # retryable blip into a crash. Unwrap to the SqlException first.
+                $ex = $_.Exception
+                while ($ex -and $ex -isnot [System.Data.SqlClient.SqlException]) { $ex = $ex.InnerException }
+                if (-not $ex) { throw }
+                $num = $ex.Number
                 if ($attempt -ge $MaxAttempts -or $num -notin $script:SqlTransient) { throw }
                 $wait = 5 * $attempt
                 Info "transient SQL error $num (attempt $attempt/$MaxAttempts) - retrying in ${wait}s..."
@@ -326,8 +334,13 @@ try {
     # ── Database bootstrap (creates only; never drops or overwrites) ──────────
     # Defined after the sqlcmd helpers because PowerShell resolves functions at
     # call time, not parse time.
+    # sys.databases, NOT DB_ID(): in Azure SQL, DB_ID('other-db') evaluated from
+    # master returns NULL because cross-database metadata does not resolve that
+    # way, so the check reported a live database as missing (2026-08-14).
+    # sys.databases in master lists every database on the logical server and
+    # behaves identically on LocalDB / on-prem.
     $dbExists = (Invoke-SqlCmd -Db 'master' -Scalar `
-        -Query "SET NOCOUNT ON; SELECT CASE WHEN DB_ID('$SqlDatabase') IS NULL THEN 0 ELSE 1 END;")
+        -Query "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.databases WHERE name = N'$SqlDatabase';")
     $dbExists = ($dbExists -split "`n" | Where-Object { $_.Trim() } | Select-Object -First 1).Trim()
     if ($dbExists -eq '1') {
         Ok "database exists: $SqlDatabase"
