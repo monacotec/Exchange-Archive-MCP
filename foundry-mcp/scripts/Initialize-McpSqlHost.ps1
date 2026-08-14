@@ -72,14 +72,16 @@ param(
     # Humans who may READ the databases (the MCP access group by default).
     [string]   $ReaderGroup    = 'SG-Exchange-Archive-MCP-Users',
     # The Function App's user-assigned identity -- future MCPs read/write as this.
-    [string]   $FunctionIdentityName     = 'uai-exchange-mcp',
-    [string]   $FunctionIdentityClientId,
+    # Client id observed in production traces (ManagedIdentityCredential lines in
+    # App Insights); resolved to its real name at run time, name is only a label.
+    [string]   $FunctionIdentityClientId = 'e408783c-42f9-4ac9-979f-038d8d35dbca',
+    [string]   $FunctionIdentityName,
 
     [string]   $ClientIp,
     [switch]   $VerifyOnly
 )
 
-$version = '1.1.0'
+$version = '1.2.0'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -218,15 +220,33 @@ try {
     }
 
     $grants = @()
-    if (-not $FunctionIdentityClientId) {
-        $uai = az identity list -g $ResourceGroup --query "[?name=='$FunctionIdentityName'] | [0]" -o json 2>$null | ConvertFrom-Json
-        if ($uai) { $FunctionIdentityClientId = $uai.clientId; $FunctionIdentityName = $uai.name }
+    # Resolve the identity by CLIENT ID across the subscription -- it need not
+    # live in this resource group, and guessing its name does not work (the
+    # 2026-08-14 inventory run missed it that way). The name is only a label:
+    # Azure SQL maps an incoming token to a database principal by SID, and for a
+    # managed identity / app that SID derives from the CLIENT id, not the object
+    # id (groups are the opposite -- object id, TYPE = X).
+    $uai = $null
+    if ($FunctionIdentityClientId) {
+        $uai = az identity list --query "[?clientId=='$FunctionIdentityClientId'] | [0]" -o json 2>$null | ConvertFrom-Json
+    }
+    if (-not $uai -and $FunctionIdentityName) {
+        $uai = az identity list --query "[?name=='$FunctionIdentityName'] | [0]" -o json 2>$null | ConvertFrom-Json
+    }
+    if ($uai) {
+        $FunctionIdentityClientId = $uai.clientId
+        if (-not $FunctionIdentityName) { $FunctionIdentityName = $uai.name }
+        Ok "managed identity resolved: $FunctionIdentityName (client $FunctionIdentityClientId, rg $($uai.resourceGroup))"
+    } elseif ($FunctionIdentityClientId) {
+        if (-not $FunctionIdentityName) { $FunctionIdentityName = "mi-$($FunctionIdentityClientId.Substring(0,8))" }
+        Info "identity object not found via az, but the client id was supplied - granting by SID as '$FunctionIdentityName'"
     }
     if ($FunctionIdentityClientId) {
         $grants += @{ Name = $FunctionIdentityName; Sid = (ConvertTo-SqlSid $FunctionIdentityClientId); Type = 'E'
                       Roles = @('db_datareader', 'db_datawriter'); What = 'Function App managed identity (MCP read/write)' }
     } else {
-        Info "managed identity '$FunctionIdentityName' not found in $ResourceGroup - pass -FunctionIdentityClientId to grant it"
+        Info 'no managed identity resolved - pass -FunctionIdentityClientId to grant one'
+        Info ('identities in the subscription: ' + ((az identity list --query '[].name' -o tsv 2>$null) -join ', '))
     }
     if ($ReaderGroup) {
         $rg = az ad group show --group $ReaderGroup -o json 2>$null | ConvertFrom-Json
