@@ -34,6 +34,16 @@ $script:LogDir = Join-Path $PSScriptRoot '..\logs'
 if (-not (Test-Path $script:LogDir)) { New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null }
 $script:LogPath = Join-Path (Resolve-Path $script:LogDir).Path ("ediscovery-export-{0}.log" -f (Get-Date).ToString('yyyyMMdd-HHmmss'))
 Start-Transcript -Path $script:LogPath | Out-Null
+
+trap {
+    # sweep:error-logging (linear script) -- no try/finally here, so without this a
+    # terminating error kills the run and the transcript ends with no reason
+    # recorded. Log it, close the transcript, then rethrow.
+    Write-Host "  [!!] unhandled error: $($_.Exception.Message)" -ForegroundColor Red
+    if ($_.InvocationInfo) { Write-Host "       at line $($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line.Trim())" -ForegroundColor DarkGray }
+    try { Stop-Transcript | Out-Null } catch { }
+    break
+}
 Write-Host "Logging this run to: $script:LogPath" -ForegroundColor DarkGray
 
 function Ok  ($t) { Write-Host "  [PASS] $t" -ForegroundColor Green }

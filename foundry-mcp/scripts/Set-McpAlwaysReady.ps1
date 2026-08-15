@@ -50,6 +50,16 @@ $script:LogDir = Join-Path $PSScriptRoot '..\logs'
 if (-not (Test-Path $script:LogDir)) { New-Item -ItemType Directory -Path $script:LogDir -Force | Out-Null }
 $script:LogPath = Join-Path (Resolve-Path $script:LogDir).Path ("mcp-alwaysready-{0}.log" -f (Get-Date).ToString('yyyyMMdd-HHmmss'))
 Start-Transcript -Path $script:LogPath | Out-Null
+
+trap {
+    # sweep:error-logging (linear script) -- no try/finally here, so without this a
+    # terminating error kills the run and the transcript ends with no reason
+    # recorded. Log it, close the transcript, then rethrow.
+    Write-Host "  [!!] unhandled error: $($_.Exception.Message)" -ForegroundColor Red
+    if ($_.InvocationInfo) { Write-Host "       at line $($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line.Trim())" -ForegroundColor DarkGray }
+    try { Stop-Transcript | Out-Null } catch { }
+    break
+}
 Write-Host "Logging this run to: $script:LogPath" -ForegroundColor DarkGray
 
 function Ok   ([string]$m) { Write-Host "[OK] $m" -ForegroundColor Green }
@@ -65,7 +75,10 @@ Write-Host "`n=== 1. Azure authentication ===" -ForegroundColor Cyan
 $acct = az account show -o json 2>$null | ConvertFrom-Json
 if (-not $acct) { az login --output none; $acct = az account show -o json | ConvertFrom-Json }
 if ($acct.id -ne $SubscriptionId) { az account set --subscription $SubscriptionId }
-$null = az account get-access-token --resource 'https://management.azure.com/' -o json 2>$null
+# sweep:auth-probe -- a token for management.azure.com does NOT prove the
+# CLI's other ARM audience is still valid: on 2026-08-14 this probe passed
+# and the next call failed AADSTS70043. Probe with a real read instead.
+$null = az group show -n $ResourceGroup -o none 2>$null
 if ($LASTEXITCODE -ne 0) {
     Info 'Cached az session is stale (CA 4h window). Re-authenticating...'
     az logout 2>$null; az login --output none

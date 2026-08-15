@@ -218,6 +218,14 @@ try {
         for ($i = 0; $i -lt $issues.Count; $i++) { Write-Host ("  {0}. {1}" -f ($i + 1), $issues[$i]) -ForegroundColor Red }
     }
 }
+catch {
+    # sweep:error-logging -- a terminating error propagates PAST finally, so without this
+    # it prints to the console only after Stop-Transcript has run and the log
+    # ends with no reason recorded. Log it, then rethrow.
+    Write-Host "  [!!] unhandled error: $($_.Exception.Message)" -ForegroundColor Red
+    if ($_.InvocationInfo) { Write-Host "       at line $($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line.Trim())" -ForegroundColor DarkGray }
+    throw
+}
 finally {
     if (Get-MgContext) { Disconnect-MgGraph | Out-Null; Write-Host 'Disconnected from Microsoft Graph.' -ForegroundColor DarkGray }
     Write-Host "`nLog saved to: $script:LogPath" -ForegroundColor Cyan

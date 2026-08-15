@@ -115,7 +115,10 @@ try {
     if ($acct.id -ne $SubscriptionId) { az account set --subscription $SubscriptionId }
     # Cached CLI sessions pass `account show` while every real call fails under
     # the 4h Conditional Access sign-in frequency -- probe with a real token.
-    $null = az account get-access-token --resource 'https://management.azure.com/' -o json 2>$null
+    # sweep:auth-probe -- a token for management.azure.com does NOT prove the
+    # CLI's other ARM audience is still valid: on 2026-08-14 this probe passed
+    # and the next call failed AADSTS70043. Probe with a real read instead.
+    $null = az group show -n $ResourceGroup -o none 2>$null
     if ($LASTEXITCODE -ne 0) {
         Info 'cached session stale (CA sign-in frequency) - re-authenticating'
         az logout 2>$null; az login --tenant $TenantId --output none; az account set --subscription $SubscriptionId
@@ -347,6 +350,14 @@ SELECT N'ok';
         Write-Host "PROBLEMS ($($script:Issues.Count)):" -ForegroundColor Red
         for ($i = 0; $i -lt $script:Issues.Count; $i++) { Write-Host ("  {0}. {1}" -f ($i + 1), $script:Issues[$i]) -ForegroundColor Red }
     }
+}
+catch {
+    # sweep:error-logging -- a terminating error propagates PAST finally, so without this
+    # it prints to the console only after Stop-Transcript has run and the log
+    # ends with no reason recorded. Log it, then rethrow.
+    Write-Host "  [!!] unhandled error: $($_.Exception.Message)" -ForegroundColor Red
+    if ($_.InvocationInfo) { Write-Host "       at line $($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line.Trim())" -ForegroundColor DarkGray }
+    throw
 }
 finally {
     Write-Host "`nLog saved to: $script:LogPath" -ForegroundColor Cyan

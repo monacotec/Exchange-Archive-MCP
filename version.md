@@ -23,6 +23,7 @@ are now **redirect stubs** pointing here — record version bumps in this file.
 | `plans/` | — | Build plans + decision records |
 | `version.md` | 2.0.0 | This merged suite manifest |
 | `.env.example` | 1.0.0 | Template for the root `.env` (archive-index SQL target); real `.env` is gitignored |
+| `scripts/Add-ScriptErrorLogging.ps1` | 1.0.0 | Sweeps two reliability fixes across operator scripts: a catch/trap so failures reach the log, and a real-ARM-call auth probe. Idempotent; reverts any edit that breaks parsing |
 | `scripts/Test-VersionManifest.ps1` | 1.1.0 | Verifies this manifest against every file's own version anchor; reports drift, missing and unlisted files. Exits 1 so it can gate a release |
 | `docs/build-briefs-pdf.ps1` | 1.0.0 | Renders the HTML briefs to PDF |
 | `docs/gi-foundry-lessons.md` | — | What to keep, and deliberately not inherit, from the archived origin project |

@@ -203,6 +203,14 @@ try {
     }
     if ($issues.Count -gt 0) { exit 1 }
 }
+catch {
+    # sweep:error-logging -- a terminating error propagates PAST finally, so without this
+    # it prints to the console only after Stop-Transcript has run and the log
+    # ends with no reason recorded. Log it, then rethrow.
+    Write-Host "  [!!] unhandled error: $($_.Exception.Message)" -ForegroundColor Red
+    if ($_.InvocationInfo) { Write-Host "       at line $($_.InvocationInfo.ScriptLineNumber): $($_.InvocationInfo.Line.Trim())" -ForegroundColor DarkGray }
+    throw
+}
 finally {
     Disconnect-MgGraph | Out-Null
     Write-Host "`nLog saved to: $script:LogPath" -ForegroundColor Cyan

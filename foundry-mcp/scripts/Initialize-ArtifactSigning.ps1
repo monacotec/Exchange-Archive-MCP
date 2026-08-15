@@ -74,14 +74,20 @@ if ($acct.id -ne $SubscriptionId) { az account set --subscription $SubscriptionI
 # every real ARM call fails with AADSTS70043 ("refresh token has expired ... sign-in
 # frequency checks"). Prove the token is live before mutating; force a clean re-login
 # if it is stale, then retry once.
-az account get-access-token --resource 'https://management.azure.com/' --output none 2>$null
+# sweep:auth-probe -- a token for management.azure.com does NOT prove the
+# CLI's other ARM audience is still valid: on 2026-08-14 this probe passed
+# and the next call failed AADSTS70043. Probe with a real read instead.
+$null = az group show -n $ResourceGroup -o none 2>$null
 if ($LASTEXITCODE -ne 0) {
     Warn 'Cached token is stale (conditional-access 4h sign-in frequency). Re-authenticating interactively...'
     az logout 2>$null | Out-Null
     az login --tenant $TenantId --output none
     if ($LASTEXITCODE -ne 0) { throw "Interactive re-login failed. Run: az login --tenant $TenantId  then re-run this script." }
     az account set --subscription $SubscriptionId
-    az account get-access-token --resource 'https://management.azure.com/' --output none 2>$null
+    # sweep:auth-probe -- a token for management.azure.com does NOT prove the
+    # CLI's other ARM audience is still valid: on 2026-08-14 this probe passed
+    # and the next call failed AADSTS70043. Probe with a real read instead.
+    $null = az group show -n $ResourceGroup -o none 2>$null
     if ($LASTEXITCODE -ne 0) { throw 'Token still not live after re-login; resolve sign-in, then re-run.' }
     $acct = az account show -o json | ConvertFrom-Json
 }
