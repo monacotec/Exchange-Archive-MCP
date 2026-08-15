@@ -49,7 +49,7 @@ param(
     [switch]    $Apply
 )
 
-$version = '1.3.0'
+$version = '1.3.1'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -99,9 +99,16 @@ try {
     # (hit live 2026-08-14). stderr goes to a file and is used only for
     # diagnostics.
     $errFile = Join-Path $env:TEMP ("az-stderr-{0}.txt" -f (New-Guid).Guid.Substring(0, 8))
+    $errText = ''
     try {
         $listText = (az resource list -g $ResourceGroup -o json 2>$errFile | Out-String).Trim()
-        $errText  = if (Test-Path $errFile) { (Get-Content $errFile -Raw).Trim() } else { '' }
+        # -Raw on an EMPTY file returns $null, not '', and .Trim() on null throws
+        # under StrictMode -- which is the happy path here, since a clean run
+        # writes nothing to stderr.
+        if (Test-Path $errFile) {
+            $rawErr = Get-Content $errFile -Raw
+            if ($rawErr) { $errText = $rawErr.Trim() }
+        }
     } finally { Remove-Item $errFile -Force -ErrorAction SilentlyContinue }
 
     if ($LASTEXITCODE -ne 0) {
