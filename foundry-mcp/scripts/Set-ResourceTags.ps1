@@ -49,7 +49,7 @@ param(
     [switch]    $Apply
 )
 
-$version = '1.1.0'
+$version = '1.2.0'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -84,7 +84,20 @@ try {
 
     # ── 2. Select resources ───────────────────────────────────────────────────
     Step "2. Resources in $ResourceGroup"
-    $all = @(az resource list -g $ResourceGroup -o json | ConvertFrom-Json)
+    # Capture stdout+stderr and the exit code separately. Piping straight into
+    # ConvertFrom-Json hides why a listing failed: an empty or non-JSON payload
+    # throws "cannot bind argument ... empty string" from ConvertFrom-Json, which
+    # says nothing about the CLI call that actually failed.
+    $rawList = az resource list -g $ResourceGroup -o json 2>&1
+    $listText = ($rawList | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        throw "Listing resources in '$ResourceGroup' failed (exit $LASTEXITCODE): $listText"
+    }
+    if (-not $listText) {
+        throw "Listing resources in '$ResourceGroup' returned nothing. Check the resource group name and that this account can read it."
+    }
+    try { $all = @($listText | ConvertFrom-Json) }
+    catch { throw "Resource listing was not valid JSON: $($listText.Substring(0, [Math]::Min(300, $listText.Length)))" }
     if (-not $all.Count) { throw "No resources found in $ResourceGroup." }
     Ok "$($all.Count) resource(s) in the group"
 
@@ -185,6 +198,15 @@ try {
         Write-Host "PROBLEMS ($($issues.Count)):" -ForegroundColor Red
         for ($i = 0; $i -lt $issues.Count; $i++) { Write-Host ("  {0}. {1}" -f ($i + 1), $issues[$i]) -ForegroundColor Red }
     }
+}
+catch {
+    # Without this, a terminating error propagates PAST the finally block and
+    # prints to the console only AFTER Stop-Transcript has run -- so the log ends
+    # mid-section with no reason recorded, and the operator has to copy the error
+    # out of the terminal by hand. Log it first, then rethrow.
+    Bad "unhandled error: $($_.Exception.Message)"
+    if ($_.ScriptStackTrace) { Note ($_.ScriptStackTrace -split "`n" | Select-Object -First 3) -join "`n  " }
+    throw
 }
 finally {
     Write-Host "`nLog saved to: $script:LogPath" -ForegroundColor Cyan
