@@ -49,7 +49,7 @@ param(
     [switch]    $Apply
 )
 
-$version = '1.2.0'
+$version = '1.3.0'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -87,20 +87,35 @@ try {
 
     # ── 2. Select resources ───────────────────────────────────────────────────
     Step "2. Resources in $ResourceGroup"
-    # Capture stdout+stderr and the exit code separately. Piping straight into
-    # ConvertFrom-Json hides why a listing failed: an empty or non-JSON payload
-    # throws "cannot bind argument ... empty string" from ConvertFrom-Json, which
-    # says nothing about the CLI call that actually failed.
-    $rawList = az resource list -g $ResourceGroup -o json 2>&1
-    $listText = ($rawList | Out-String).Trim()
+    # Two failures live here, both paid for on 2026-08-14:
+    #   - Piping straight into ConvertFrom-Json hides WHY a listing failed: an
+    #     empty payload throws "cannot bind argument ... empty string", which
+    #     says nothing about the CLI call underneath. Hence the exit-code and
+    #     empty-output checks below, each with its own message.
+    #   - Keep the streams APART. '2>&1' merges stderr into the payload, and the CLI
+    # writes chatty notices there ("[Warning] The login output has been
+    # updated...") -- appended to the JSON that yields valid-JSON-plus-prose,
+    # which ConvertFrom-Json rejects while the listing itself was perfectly fine
+    # (hit live 2026-08-14). stderr goes to a file and is used only for
+    # diagnostics.
+    $errFile = Join-Path $env:TEMP ("az-stderr-{0}.txt" -f (New-Guid).Guid.Substring(0, 8))
+    try {
+        $listText = (az resource list -g $ResourceGroup -o json 2>$errFile | Out-String).Trim()
+        $errText  = if (Test-Path $errFile) { (Get-Content $errFile -Raw).Trim() } else { '' }
+    } finally { Remove-Item $errFile -Force -ErrorAction SilentlyContinue }
+
     if ($LASTEXITCODE -ne 0) {
-        throw "Listing resources in '$ResourceGroup' failed (exit $LASTEXITCODE): $listText"
+        throw "Listing resources in '$ResourceGroup' failed (exit $LASTEXITCODE): $errText"
     }
     if (-not $listText) {
-        throw "Listing resources in '$ResourceGroup' returned nothing. Check the resource group name and that this account can read it."
+        throw "Listing resources in '$ResourceGroup' returned nothing. Check the resource group name and that this account can read it. CLI said: $errText"
     }
+    if ($errText) { Info "CLI notice (ignored): $(($errText -split "`n" | Select-Object -First 1).Trim())" }
     try { $all = @($listText | ConvertFrom-Json) }
-    catch { throw "Resource listing was not valid JSON: $($listText.Substring(0, [Math]::Min(300, $listText.Length)))" }
+    catch {
+        throw ("Resource listing was not valid JSON ({0}). First 300 chars: {1}" -f
+               $_.Exception.Message, $listText.Substring(0, [Math]::Min(300, $listText.Length)))
+    }
     if (-not $all.Count) { throw "No resources found in $ResourceGroup." }
     Ok "$($all.Count) resource(s) in the group"
 
